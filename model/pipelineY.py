@@ -17,7 +17,6 @@ import subprocess
 import threading
 import queue
 import concurrent.futures
-import importlib.util
 import hashlib
 
 import cv2
@@ -32,119 +31,53 @@ from google import genai
 os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "tls_verify;0"
 
 
-def _patch_torch_lib_path():
-    import sysconfig
-    site_packages = sysconfig.get_path("purelib")
-    torch_lib = os.path.join(site_packages, "torch", "lib")
-    if os.path.isdir(torch_lib):
-        current = os.environ.get("LD_LIBRARY_PATH", "")
-        if torch_lib not in current:
-            os.environ["LD_LIBRARY_PATH"] = f"{torch_lib}:{current}"
-            os.execve(sys.executable, [sys.executable] + sys.argv, os.environ)
-
-_patch_torch_lib_path()
-
-
 # ──────────────────────────────────────────────────────────────────────────────
-# 1.  Entropy extension loader + unified dispatch
+# 1.  Motion Entropy Calculation (Pure PyTorch Vectorized)
 # ──────────────────────────────────────────────────────────────────────────────
-_entropy_ext = None
-
-def _load_entropy_extension(so_path: str = "./entropy_gate.cpython-312-x86_64-linux-gnu.so"):
-    global _entropy_ext
-    if _entropy_ext is not None:
-        return _entropy_ext
-    if os.path.exists(so_path):
-        try:
-            spec = importlib.util.spec_from_file_location("entropy_gate", so_path)
-            _entropy_ext = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(_entropy_ext)
-            print(f"✅  Entropy C++ extension loaded from {so_path}")
-        except Exception as e:
-            print(f"⚠️  Entropy extension load failed ({e}). Using PyTorch fallback.")
-            _entropy_ext = None
-    else:
-        print(f"⚠️  Entropy extension not found at '{so_path}'. Using PyTorch fallback.")
-    return _entropy_ext
-
-
 def _compute_entropy_hardware(prev: torch.Tensor, curr: torch.Tensor,
                                noise_floor: float,
                                shift_threshold: float) -> tuple[bool, float]:
     """
-    C++ CUDA kernel when extension loaded, OpenMP ATen fallback otherwise.
-    Returns (motion_detected, pixel_change_ratio).
+    Computes the ratio of pixels that changed between prev and curr frames.
+    Runs on the active PyTorch device (CPU/CUDA/MPS) automatically.
     """
-    ext = _load_entropy_extension()
     with torch.no_grad():
-        if ext is not None:
-            motion_detected = ext.compute_entropy(
-                prev.contiguous(), curr.contiguous(),
-                noise_floor, shift_threshold
-            )
-            ratio = (torch.abs(curr - prev) > noise_floor).float().mean().item()
-        else:
-            diff_mask = torch.abs(curr - prev) > noise_floor
-            ratio = diff_mask.float().mean().item()
-            motion_detected = ratio >= shift_threshold
+        diff_mask = torch.abs(curr - prev) > noise_floor
+        ratio = diff_mask.float().mean().item()
+        motion_detected = ratio >= shift_threshold
     return motion_detected, ratio
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 2.  CUDA cosine similarity (all-VRAM top-k, no ChromaDB round-trip)
+# 2.  In-VRAM Cosine Similarity Search (Pure PyTorch Vectorized)
 # ──────────────────────────────────────────────────────────────────────────────
 def _cuda_topk_cosine(query_vec: "torch.Tensor",
                       candidate_vecs: "torch.Tensor",
                       top_k: int) -> "torch.Tensor":
     """
-    All-VRAM top-k cosine similarity search.
-    Routes to C++ CUDA kernel (entropy extension) when loaded,
-    falls back to ATen matmul otherwise.
- 
+    Performs cosine similarity search directly in device VRAM using PyTorch.
     query_vec:      [D]    — L2-normalised
     candidate_vecs: [N, D] — L2-normalised
-    Returns: LongTensor [k] of most-similar row indices.
+    Returns: LongTensor [k] of most-similar indices.
     """
-    ext = _load_entropy_extension()
-    if ext is not None and query_vec.device.type == "cuda":
-        # C++ CUDA kernel with shared-memory tiling (sm_86 tuned)
-        return ext.topk_cosine_search(
-            query_vec.contiguous(),
-            candidate_vecs.contiguous(),
-            top_k
-        )
-    # ATen fallback (MPS / CPU)
-    sims = candidate_vecs @ query_vec          # [N] dot products
-    k    = min(top_k, sims.shape[0])
-    return torch.topk(sims, k).indices
+    with torch.no_grad():
+        sims = candidate_vecs @ query_vec          # [N] dot products
+        k    = min(top_k, sims.shape[0])
+        return torch.topk(sims, k).indices
+
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 3.  CUDA multimodal fusion kernel
-#     Used by find_suspect_by_image to fuse image + text vectors on-device
+# 3.  Vector Modality Fusion (Pure PyTorch Vectorized)
 # ──────────────────────────────────────────────────────────────────────────────
 def _cuda_fuse_modalities(image_vec: "torch.Tensor",
                            text_vec: "torch.Tensor | None",
                            image_weight: float = 0.5) -> "torch.Tensor":
     """
-    Weighted multimodal fusion + L2 renormalise.
-    Routes to C++ CUDA kernel when extension is loaded and tensor is on CUDA.
-    Falls back to ATen otherwise (works on MPS / CPU).
- 
-    image_weight=0.5 → arithmetic mean (matches teammate's p.py fusion).
-    Returns None-safe: when text_vec is None, returns image_vec unchanged.
+    Weighted multimodal fusion + L2 renormalization using standard PyTorch.
+    Returns image_vec unchanged if text_vec is None.
     """
     if text_vec is None:
         return image_vec
- 
-    ext = _load_entropy_extension()
-    if ext is not None and image_vec.device.type == "cuda":
-        # C++ CUDA kernel: fuse_modalities_kernel + l2_divide_kernel
-        return ext.fuse_modalities(
-            image_vec.contiguous(),
-            text_vec.contiguous(),
-            image_weight
-        )
-    # ATen fallback
     with torch.no_grad():
         fused  = image_weight * image_vec + (1.0 - image_weight) * text_vec
         fused /= fused.norm(dim=-1, keepdim=True)
@@ -161,8 +94,7 @@ class OfflineVideoPipeline:
     COLLECTION_UPLOADED = "uploaded_vault"
 
     def __init__(self, api_key: str,
-                 collection_name: str = "cctv_main_stream",
-                 entropy_so_path: str = "./entropy_gate.cpython-312-x86_64-linux-gnu.so"):
+                 collection_name: str = "cctv_main_stream"):
 
         # ── Hardware dispatch ────────────────────────────────────────────────
         if torch.cuda.is_available():
@@ -223,8 +155,7 @@ class OfflineVideoPipeline:
         )
         self._worker_thread.start()
 
-        # ── Pre-load entropy extension ────────────────────────────────────────
-        _load_entropy_extension(entropy_so_path)
+
 
     # ──────────────────────────────────────────────────────────────────────────
     # Internal helpers
@@ -273,6 +204,29 @@ class OfflineVideoPipeline:
         )
         col.add(embeddings=features.cpu().tolist(), metadatas=metadatas, ids=ids)
         print(f"💾 Stored {len(tensor_list)} frames → [{collection_name}] | total: {col.count()}")
+
+    def _store_batch(self, images: list, metadatas: list, ids: list, collection_name: str | None = None):
+        """
+        Legacy/WIP compatibility helper. Converts PIL Images/BGR arrays to hardware tensors 
+        and calls _store_batch_hardware.
+        """
+        if collection_name is None:
+            collection_name = self.default_collection_name
+        
+        tensor_list = []
+        for img in images:
+            if isinstance(img, Image.Image):
+                import numpy as np
+                img_np = np.array(img.convert("RGB"))
+                img_bgr = img_np[:, :, ::-1].copy()
+                tensor_list.append(self._convert_cv2_to_hardware_tensor(img_bgr))
+            elif isinstance(img, np.ndarray):
+                tensor_list.append(self._convert_cv2_to_hardware_tensor(img))
+            elif torch.is_tensor(img):
+                tensor_list.append(img.to(self.device))
+        
+        self._store_batch_hardware(tensor_list, metadatas, ids, collection_name)
+
 
     def _vlm_query(self, cache_key: str, contents: list) -> str:
         """VLM call with MD5-keyed cache to save quota."""
