@@ -277,14 +277,14 @@ export default function Navbar() {
         <div className="absolute inset-0 bg-gradient-to-r from-black via-zinc-900 to-black opacity-95 backdrop-blur-xl"></div>
 
         {/* Glow Line */}
-        <div className="absolute bottom-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-cyan-400 to-purple-500 opacity-40"></div>
+        <div className="absolute bottom-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-[#D4AF37] to-[#B8962E] opacity-40"></div>
 
-        <div className="relative max-w-7xl mx-auto grid grid-cols-3 items-center px-4 md:px-8 py-4 gap-4">
+        <div className="relative max-w-7xl mx-auto flex items-center justify-between px-4 md:px-8 py-4 gap-2">
           {/* Left: Menu + Logo */}
-          <div className="flex items-center justify-start gap-3">
+          <div className="flex items-center justify-start gap-3 flex-1 min-w-0">
             <button
               onClick={() => setSidebarOpen(true)}
-              className="p-[1.5px] rounded-lg bg-gradient-to-r from-cyan-400 to-purple-500 hover:scale-105 transition"
+              className="p-[1.5px] rounded-lg bg-gradient-to-r from-[#D4AF37] to-[#B8962E] hover:scale-105 transition"
               aria-label="Open history sidebar"
             >
               <div className="w-10 h-10 rounded-lg bg-black flex items-center justify-center text-white">
@@ -292,17 +292,17 @@ export default function Navbar() {
               </div>
             </button>
 
-            <h1 className="text-xl md:text-2xl font-bold bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-500 bg-clip-text text-transparent shrink-0">
+            <h1 className="text-xl md:text-2xl font-bold bg-gradient-to-r from-[#D4AF37] via-[#F4D03F] to-[#B8962E] bg-clip-text text-transparent shrink-0">
               WatchTower AI
             </h1>
           </div>
 
           {/* Center Navigation */}
-          <div className="hidden md:flex items-center justify-center gap-8 lg:gap-12 text-base lg:text-lg font-semibold tracking-wide whitespace-nowrap">
+          <div className="hidden md:flex items-center justify-center gap-8 lg:gap-12 text-base lg:text-lg font-semibold tracking-wide whitespace-nowrap flex-[2]">
             {location.pathname !== "/" && (
               <Link
                 to="/"
-                className="bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent hover:from-cyan-400 hover:to-purple-500 transition"
+                className="bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent hover:from-[#D4AF37] hover:to-[#F4D03F] transition"
               >
                 Home
               </Link>
@@ -310,7 +310,7 @@ export default function Navbar() {
             {location.pathname !== "/dashboard" && (
               <Link
                 to="/dashboard"
-                className="bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent hover:from-cyan-400 hover:to-purple-500 transition"
+                className="bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent hover:from-[#D4AF37] hover:to-[#F4D03F] transition"
               >
                 Dashboard
               </Link>
@@ -318,7 +318,7 @@ export default function Navbar() {
             {location.pathname !== "/tripwires" && (
               <Link
                 to="/tripwires"
-                className="bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent hover:from-cyan-400 hover:to-purple-500 transition"
+                className="bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent hover:from-[#D4AF37] hover:to-[#F4D03F] transition"
               >
                 Live Alerts
               </Link>
@@ -326,7 +326,7 @@ export default function Navbar() {
             {location.pathname !== "/livestream" && (
               <Link
                 to="/livestream"
-                className="bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent hover:from-cyan-400 hover:to-purple-500 transition"
+                className="bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent hover:from-[#D4AF37] hover:to-[#F4D03F] transition"
               >
                 Live Stream
               </Link>
@@ -334,18 +334,19 @@ export default function Navbar() {
           </div>
 
           {/* Right */}
-          <div className="flex items-center justify-end gap-5 shrink-0 whitespace-nowrap pr-4 md:pr-8">
+          {/* Right */}
+          <div className="flex items-center justify-end gap-2 sm:gap-5 shrink-0 whitespace-nowrap flex-1">
             {isLoggedIn ? (
               <>
-                {/* --- NEW: Active Alerts Manager --- */}
-                <div className="relative">
-                  <div className="p-[1.5px] rounded-lg bg-gradient-to-r from-cyan-400 to-blue-500">
+                {/* --- NEW: Active Alerts Manager - Hidden on mobile to save space --- */}
+                <div className="relative hidden sm:block">
+                  <div className="p-[1.5px] rounded-lg bg-gradient-to-r from-[#D4AF37] to-[#B8962E]">
                     <button 
                       onClick={() => setShowActiveRules(!showActiveRules)}
                       className="px-4 py-2 rounded-lg bg-black font-medium group flex items-center gap-2"
                     >
-                       <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
-                      <span className="text-white text-sm group-hover:bg-gradient-to-r group-hover:from-cyan-400 group-hover:to-blue-500 group-hover:bg-clip-text group-hover:text-transparent">
+                       <span className="w-2 h-2 rounded-full bg-[#D4AF37] animate-pulse"></span>
+                      <span className="text-white text-sm group-hover:bg-gradient-to-r group-hover:from-[#D4AF37] group-hover:to-[#B8962E] group-hover:bg-clip-text group-hover:text-transparent">
                         Active Alerts ({activeRules.length})
                       </span>
                     </button>
@@ -354,7 +355,7 @@ export default function Navbar() {
                   {showActiveRules && (
                     <div className="absolute right-0 mt-3 w-80 bg-black/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl p-5 z-[100] animate-in fade-in zoom-in duration-200">
                       <div className="flex justify-between items-center mb-4 pb-2 border-b border-white/5">
-                        <h3 className="text-sm font-bold text-cyan-400 uppercase tracking-wider">AI Watchlist</h3>
+                        <h3 className="text-sm font-bold text-[#D4AF37] uppercase tracking-wider">AI Watchlist</h3>
                         <Link to="/alerts/create" onClick={() => setShowActiveRules(false)} className="text-[10px] bg-white/10 hover:bg-white/20 px-2 py-1 rounded transition text-gray-300">+ New Rule</Link>
                       </div>
 
@@ -363,12 +364,12 @@ export default function Navbar() {
                       ) : activeRules.length === 0 ? (
                         <div className="py-8 text-center">
                           <p className="text-gray-500 text-xs">No active AI rules.</p>
-                          <Link to="/alerts/create" onClick={() => setShowActiveRules(false)} className="text-cyan-400 text-[10px] mt-2 block hover:underline">Click here to create your first alert</Link>
+                          <Link to="/alerts/create" onClick={() => setShowActiveRules(false)} className="text-[#D4AF37] text-[10px] mt-2 block hover:underline">Click here to create your first alert</Link>
                         </div>
                       ) : (
                         <div className="space-y-3 max-h-64 overflow-y-auto pr-1 custom-scrollbar">
                           {activeRules.map((rule) => (
-                            <div key={rule.id} className="group p-3 rounded-lg bg-white/[0.03] border border-white/5 hover:border-cyan-400/30 transition-all flex justify-between items-center gap-3">
+                            <div key={rule.id} className="group p-3 rounded-lg bg-white/[0.03] border border-white/5 hover:border-[#D4AF37]/30 transition-all flex justify-between items-center gap-3">
                               <div className="min-w-0">
                                 <p className="text-xs text-white font-medium truncate italic">"{rule.condition}"</p>
                                 <p className="text-[10px] text-gray-500 mt-1">Status: <span className="text-green-500">Monitoring...</span></p>
@@ -391,21 +392,21 @@ export default function Navbar() {
             ) : (
               <>
                 {/* Login */}
-                <Link to="/login" className="shrink-0">
-                  <div className="p-[1.5px] rounded-lg bg-gradient-to-r from-cyan-400 to-purple-500">
-                    <button className="px-5 md:px-4 py-2 rounded-lg bg-black font-medium group">
-                      <span className="text-white text-sm group-hover:bg-gradient-to-r group-hover:from-cyan-400 group-hover:to-purple-500 group-hover:bg-clip-text group-hover:text-transparent">
+                <Link to="/login" className="shrink-0 scale-90 sm:scale-100">
+                  <div className="p-[1.5px] rounded-lg bg-gradient-to-r from-[#D4AF37] to-[#B8962E]">
+                    <button className="px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg bg-black font-medium group">
+                      <span className="text-white text-xs sm:text-sm group-hover:bg-gradient-to-r group-hover:from-[#D4AF37] group-hover:to-[#B8962E] group-hover:bg-clip-text group-hover:text-transparent">
                         Login
                       </span>
                     </button>
                   </div>
                 </Link>
 
-                {/* Sign Up */}
-                <Link to="/signup" className="shrink-0">
-                  <div className="p-[1.5px] rounded-lg bg-gradient-to-r from-cyan-400 to-purple-500">
-                    <button className="px-3 md:px-4 py-2 rounded-lg bg-black font-medium group">
-                      <span className="text-white text-sm group-hover:bg-gradient-to-r group-hover:from-cyan-400 group-hover:to-purple-500 group-hover:bg-clip-text group-hover:text-transparent">
+                {/* Sign Up - Hidden on very small screens to avoid burst */}
+                <Link to="/signup" className="hidden xs:block shrink-0 scale-90 sm:scale-100">
+                  <div className="p-[1.5px] rounded-lg bg-gradient-to-r from-[#D4AF37] to-[#B8962E]">
+                    <button className="px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg bg-black font-medium group">
+                      <span className="text-white text-xs sm:text-sm group-hover:bg-gradient-to-r group-hover:from-[#D4AF37] group-hover:to-[#B8962E] group-hover:bg-clip-text group-hover:text-transparent">
                         Sign Up
                       </span>
                     </button>
@@ -418,7 +419,7 @@ export default function Navbar() {
             <div className="relative shrink-0">
               <div
                 onClick={handleNotificationClick}
-                className="p-[1.5px] rounded-full bg-gradient-to-r from-cyan-400 to-purple-500 cursor-pointer"
+                className="p-[1.5px] rounded-full bg-gradient-to-r from-[#D4AF37] to-[#B8962E] cursor-pointer"
               >
                 <div className="w-9 h-9 rounded-full bg-black flex items-center justify-center text-white hover:scale-105 transition">
                   <Bell size={18} />
@@ -437,7 +438,7 @@ export default function Navbar() {
                     <span className="text-sm text-gray-400">Notifications</span>
                     <button
                       onClick={handleClearNotifications}
-                      className="text-xs text-cyan-400 hover:underline"
+                      className="text-xs text-[#D4AF37] hover:underline"
                     >
                       Clear
                     </button>
@@ -524,7 +525,7 @@ export default function Navbar() {
               onClick={handleProfileClick}
               className="shrink-0"
             >
-              <div className="p-[1.5px] rounded-full bg-gradient-to-r from-cyan-400 to-purple-500 hover:scale-105 transition">
+              <div className="p-[1.5px] rounded-full bg-gradient-to-r from-[#D4AF37] to-[#B8962E] hover:scale-105 transition">
                 <div className="w-9 h-9 rounded-full bg-black flex items-center justify-center text-white font-semibold overflow-hidden">
                   {userProfile?.profile_picture ? (
                     <img src={userProfile.profile_picture} alt="Avatar" className="w-full h-full object-cover" />
@@ -600,17 +601,17 @@ export default function Navbar() {
               {/* Header */}
               <div className="flex items-center justify-between px-5 py-5 border-b border-white/10">
                 <div>
-                  <p className="text-xs uppercase tracking-[0.3em] text-cyan-400/80">
+                  <p className="text-xs uppercase tracking-[0.3em] text-[#D4AF37]/80">
                     Activity
                   </p>
-                  <h2 className="text-xl font-bold bg-gradient-to-r from-cyan-400 to-purple-500 bg-clip-text text-transparent">
+                  <h2 className="text-xl font-bold bg-gradient-to-r from-[#D4AF37] to-[#B8962E] bg-clip-text text-transparent">
                     History
                   </h2>
                 </div>
 
                 <button
                   onClick={() => setSidebarOpen(false)}
-                  className="p-[1.5px] rounded-lg bg-gradient-to-r from-cyan-400 to-purple-500 hover:scale-105 transition"
+                  className="p-[1.5px] rounded-lg bg-gradient-to-r from-[#D4AF37] to-[#B8962E] hover:scale-105 transition"
                   aria-label="Close history sidebar"
                 >
                   <div className="w-10 h-10 rounded-lg bg-black flex items-center justify-center text-white">
@@ -621,11 +622,11 @@ export default function Navbar() {
 
               {/* Summary Card */}
               <div className="px-5 pt-5">
-                <div className="p-[1.5px] rounded-2xl bg-gradient-to-r from-cyan-400/70 to-purple-500/70">
+                <div className="p-[1.5px] rounded-2xl bg-gradient-to-r from-[#D4AF37]/70 to-[#B8962E]/70">
                   <div className="rounded-2xl bg-black/90 p-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-11 h-11 rounded-xl bg-cyan-400/10 flex items-center justify-center border border-cyan-400/20">
-                        <History size={20} className="text-cyan-300" />
+                      <div className="w-11 h-11 rounded-xl bg-[#D4AF37]/10 flex items-center justify-center border border-[#D4AF37]/20">
+                        <History size={20} className="text-[#F4D03F]" />
                       </div>
                       <div>
                         <p className="text-sm text-gray-400">Total records</p>
@@ -688,9 +689,9 @@ export default function Navbar() {
                       return (
                         <div
                           key={item.id || index}
-                          className="p-[1.5px] rounded-2xl bg-gradient-to-r from-cyan-400/40 to-purple-500/40"
+                          className="p-[1.5px] rounded-2xl bg-gradient-to-r from-[#D4AF37]/40 to-[#B8962E]/40"
                         >
-                          <div className="rounded-2xl bg-black/85 p-4 border border-white/10 hover:border-cyan-400/30 transition">
+                          <div className="rounded-2xl bg-black/85 p-4 border border-white/10 hover:border-[#D4AF37]/30 transition">
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
                                 <p className="text-white font-medium leading-snug break-words">
@@ -701,7 +702,7 @@ export default function Navbar() {
                                 </p>
                               </div>
                               <div className="shrink-0">
-                                <div className="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-400/20 flex items-center justify-center text-purple-300">
+                                <div className="w-10 h-10 rounded-xl bg-[#D4AF37]/10 border border-[#D4AF37]/20 flex items-center justify-center text-[#F4D03F]">
                                   <Clock3 size={18} />
                                 </div>
                               </div>

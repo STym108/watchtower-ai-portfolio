@@ -1,0 +1,499 @@
+@import "tailwindcss";
+
+/* ===== WATCHTOWER.AI - TACTICAL GOLD-BLACK THEME ===== */
+
+:root {
+  /* Gold Palette */
+  --gold-primary: #D4AF37;
+  --gold-light: #F4D03F;
+  --gold-dark: #B8962E;
+  --gold-muted: #8B7355;
+  
+  /* Black Palette */
+  --black-primary: #000000;
+  --black-light: #0A0A0A;
+  --black-lighter: #141414;
+  --black-card: #0D0D0D;
+  
+  /* Accent Colors */
+  --accent-red: #FF3B3B;
+  --accent-green: #00FF41;
+  --accent-blue: #00A8FF;
+  
+  /* Opacity Variants */
+  --gold-10: rgba(212, 175, 55, 0.1);
+  --gold-20: rgba(212, 175, 55, 0.2);
+  --gold-30: rgba(212, 175, 55, 0.3);
+  --gold-50: rgba(212, 175, 55, 0.5);
+  
+  /* Borders */
+  --border-gold: 1px solid var(--gold-muted);
+  --border-gold-glow: 1px solid var(--gold-primary);
+  
+  /* Shadows */
+  --shadow-gold: 0 4px 20px rgba(212, 175, 55, 0.15);
+  --shadow-gold-lg: 0 8px 40px rgba(212, 175, 55, 0.25);
+  --glow-gold: 0 0 20px rgba(212, 175, 55, 0.6);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Helvetica Neue', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: var(--black-primary);
+  color: #FFFFFF;
+  overflow-x: hidden;
+}
+
+/* ===== CUSTOM SCROLLBAR ===== */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--black-light);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--gold-muted);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--gold-primary);
+}
+
+/* ===== TACTICAL GRID OVERLAY ===== */
+.tactical-grid {
+  position: absolute;
+  inset: 0;
+  background-image: 
+    linear-gradient(var(--gold-10) 1px, transparent 1px),
+    linear-gradient(90deg, var(--gold-10) 1px, transparent 1px);
+  background-size: 50px 50px;
+  pointer-events: none;
+  opacity: 0.3;
+}
+
+/* ===== GLOWING EFFECTS ===== */
+.glow-gold {
+  box-shadow: var(--glow-gold);
+}
+
+.glow-gold-pulse {
+  animation: glowPulse 2s ease-in-out infinite;
+}
+
+@keyframes glowPulse {
+  0%, 100% {
+    box-shadow: 0 0 10px rgba(212, 175, 55, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(212, 175, 55, 0.8);
+  }
+}
+
+/* ===== TACTICAL CORNERS ===== */
+.tactical-corners {
+  position: relative;
+}
+
+.tactical-corners::before,
+.tactical-corners::after {
+  content: '';
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--gold-primary);
+}
+
+.tactical-corners::before {
+  top: -2px;
+  left: -2px;
+  border-right: none;
+  border-bottom: none;
+}
+
+.tactical-corners::after {
+  top: -2px;
+  right: -2px;
+  border-left: none;
+  border-bottom: none;
+}
+
+/* ===== SCAN LINE ANIMATION ===== */
+.scan-line {
+  position: relative;
+  overflow: hidden;
+}
+
+.scan-line::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(212, 175, 55, 0.1),
+    transparent
+  );
+  animation: scan 3s linear infinite;
+}
+
+@keyframes scan {
+  0% {
+    left: -100%;
+  }
+  100% {
+    left: 100%;
+  }
+}
+
+/* ===== HEXAGONAL ELEMENTS ===== */
+.hex-border {
+  clip-path: polygon(
+    30% 0%, 70% 0%,
+    100% 30%, 100% 70%,
+    70% 100%, 30% 100%,
+    0% 70%, 0% 30%
+  );
+}
+
+/* ===== TACTICAL BUTTON ===== */
+.btn-tactical {
+  position: relative;
+  padding: 12px 32px;
+  background: linear-gradient(135deg, var(--gold-dark), var(--gold-primary));
+  color: var(--black-primary);
+  border: none;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  overflow: hidden;
+}
+
+.btn-tactical::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.3),
+    transparent
+  );
+  transition: left 0.5s ease;
+}
+
+.btn-tactical:hover::before {
+  left: 100%;
+}
+
+.btn-tactical:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-gold-lg);
+}
+
+.btn-tactical:active {
+  transform: translateY(0);
+}
+
+/* ===== TACTICAL CARD ===== */
+.tactical-card {
+  position: relative;
+  background: var(--black-card);
+  border: 1px solid var(--gold-muted);
+  transition: all 0.3s ease;
+}
+
+.tactical-card:hover {
+  border-color: var(--gold-primary);
+  box-shadow: var(--shadow-gold);
+  transform: translateY(-2px);
+}
+
+.tactical-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 4px;
+  height: 0;
+  background: linear-gradient(180deg, var(--gold-primary), var(--gold-light));
+  transition: height 0.3s ease;
+}
+
+.tactical-card:hover::before {
+  height: 100%;
+}
+
+/* ===== DATA STREAM EFFECT ===== */
+.data-stream {
+  position: relative;
+  overflow: hidden;
+}
+
+.data-stream::before {
+  content: '';
+  position: absolute;
+  top: -100%;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    180deg,
+    transparent,
+    var(--gold-20),
+    transparent
+  );
+  animation: dataFlow 2s ease-in-out infinite;
+}
+
+@keyframes dataFlow {
+  0% {
+    top: -100%;
+  }
+  100% {
+    top: 100%;
+  }
+}
+
+/* ===== STATUS INDICATORS ===== */
+.status-active {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: rgba(0, 255, 65, 0.1);
+  border: 1px solid var(--accent-green);
+  color: var(--accent-green);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.status-active::before {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  background: var(--accent-green);
+  border-radius: 50%;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(1.2);
+  }
+}
+
+.status-alert {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: rgba(255, 59, 59, 0.1);
+  border: 1px solid var(--accent-red);
+  color: var(--accent-red);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  animation: alertBlink 1s ease-in-out infinite;
+}
+
+@keyframes alertBlink {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* ===== HUD DISPLAY ===== */
+.hud-display {
+  position: relative;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.8);
+  border: 2px solid var(--gold-primary);
+  clip-path: polygon(
+    0 0,
+    calc(100% - 20px) 0,
+    100% 20px,
+    100% 100%,
+    20px 100%,
+    0 calc(100% - 20px)
+  );
+}
+
+/* ===== LOADING SCANNER ===== */
+.loading-scanner {
+  width: 100%;
+  height: 3px;
+  background: var(--black-lighter);
+  overflow: hidden;
+  position: relative;
+}
+
+.loading-scanner::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--gold-primary),
+    transparent
+  );
+  animation: scanLoad 1.5s ease-in-out infinite;
+}
+
+@keyframes scanLoad {
+  0% {
+    left: -100%;
+  }
+  100% {
+    left: 100%;
+  }
+}
+
+/* ===== INPUT FIELDS ===== */
+.input-tactical {
+  width: 100%;
+  padding: 14px 18px;
+  background: var(--black-lighter);
+  border: 1px solid var(--gold-muted);
+  color: #FFFFFF;
+  font-size: 15px;
+  transition: all 0.3s ease;
+  outline: none;
+}
+
+.input-tactical:focus {
+  border-color: var(--gold-primary);
+  box-shadow: 0 0 0 3px var(--gold-10);
+}
+
+.input-tactical::placeholder {
+  color: var(--gold-muted);
+}
+
+/* ===== BADGE ===== */
+.badge-gold {
+  display: inline-block;
+  padding: 4px 12px;
+  background: linear-gradient(135deg, var(--gold-dark), var(--gold-primary));
+  color: var(--black-primary);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  border-radius: 3px;
+}
+
+/* ===== DIVIDER ===== */
+.divider-gold {
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--gold-primary),
+    transparent
+  );
+  margin: 24px 0;
+}
+
+/* ===== TOOLTIP ===== */
+.tooltip-tactical {
+  position: relative;
+  display: inline-block;
+}
+
+.tooltip-tactical::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%) translateY(-8px);
+  padding: 8px 12px;
+  background: var(--black-card);
+  border: 1px solid var(--gold-primary);
+  color: var(--gold-primary);
+  font-size: 12px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+.tooltip-tactical:hover::after {
+  opacity: 1;
+}
+
+/* ===== RESPONSIVE UTILITIES ===== */
+@media (max-width: 768px) {
+  .tactical-grid {
+    background-size: 30px 30px;
+  }
+  
+  .btn-tactical {
+    padding: 10px 24px;
+    font-size: 13px;
+  }
+  
+  .hud-display {
+    padding: 16px;
+  }
+}
+
+/* ===== SELECTION ===== */
+::selection {
+  background: var(--gold-primary);
+  color: var(--black-primary);
+}
+
+/* ===== FOCUS VISIBLE ===== */
+*:focus-visible {
+  outline: 2px solid var(--gold-primary);
+  outline-offset: 2px;
+}
+
+/* ===== TRANSITIONS ===== */
+* {
+  transition-property: color, background-color, border-color, box-shadow, transform;
+  transition-duration: 150ms;
+  transition-timing-function: ease-in-out;
+}
+
+/* Disable transitions on specific elements */
+button *, input *, select *, textarea * {
+  transition: none;
+}

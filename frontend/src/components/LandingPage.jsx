@@ -7,7 +7,7 @@ export default function LandingPage() {
       <div className="flex gap-12">
         
         {/* Login Option */}
-        <div className="w-full sm:w-auto p-[1.5px] rounded-2xl bg-gradient-to-r from-cyan-400 to-purple-500">
+        <div className="w-full sm:w-auto p-[1.5px] rounded-2xl bg-gradient-to-r from-[#D4AF37] to-[#B8962E]">
           <div className="bg-black rounded-2xl p-8 sm:p-10 min-w-[320px] text-center">
             <h2 className="text-2xl font-bold mb-4 text-white">
               Already have an account?
@@ -16,8 +16,8 @@ export default function LandingPage() {
               Sign in to access your CCTV AI dashboard
             </p>
             <Link to="/login" className="w-full block">
-              <div className="p-[1.5px] rounded-lg bg-gradient-to-r from-cyan-400 to-purple-500">
-                <button className="w-full px-6 py-3 rounded-lg bg-black font-semibold text-white hover:bg-gradient-to-r hover:from-cyan-400 hover:to-purple-500 transition-all duration-300">
+              <div className="p-[1.5px] rounded-lg bg-gradient-to-r from-[#D4AF37] to-[#B8962E]">
+                <button className="w-full px-6 py-3 rounded-lg bg-black font-semibold text-white hover:bg-gradient-to-r hover:from-[#D4AF37] hover:to-[#B8962E] transition-all duration-300">
                   Login
                 </button>
               </div>
@@ -26,7 +26,7 @@ export default function LandingPage() {
         </div>
 
         {/* Signup Option */}
-        <div className="p-[1.5px] rounded-2xl bg-gradient-to-r from-green-400 to-cyan-500">
+        <div className="p-[1.5px] rounded-2xl bg-gradient-to-r from-[#D4AF37] to-[#B8962E]">
           <div className="bg-black rounded-2xl p-8 sm:p-10 min-w-[320px] text-center">
             <h2 className="text-2xl font-bold mb-4 text-white">
               New user?
@@ -35,8 +35,8 @@ export default function LandingPage() {
               Create an account and join our surveillance intelligence platform
             </p>
             <Link to="/signup" className="w-full block">
-              <div className="p-[1.5px] rounded-lg bg-gradient-to-r from-green-400 to-cyan-500">
-                <button className="w-full px-6 py-3 rounded-lg bg-black font-semibold text-white hover:bg-gradient-to-r hover:from-green-400 hover:to-cyan-500 transition-all duration-300">
+              <div className="p-[1.5px] rounded-lg bg-gradient-to-r from-[#D4AF37] to-[#B8962E]">
+                <button className="w-full px-6 py-3 rounded-lg bg-black font-semibold text-white hover:bg-gradient-to-r hover:from-[#D4AF37] hover:to-[#B8962E] transition-all duration-300">
                   Sign Up
                 </button>
               </div>

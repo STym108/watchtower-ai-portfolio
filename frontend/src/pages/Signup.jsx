@@ -1,6 +1,7 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useState, useRef } from "react";
 import useToastStore from "../store/useToastStore";
+import { Lock, Mail, Shield, User, MessageCircle, Image } from "lucide-react";
 
 export default function Signup() {
 
@@ -19,14 +20,12 @@ export default function Signup() {
     const handleSignup = async (e) => {
         e.preventDefault();
 
-        // Prevent double-submit using ref (synchronous check)
         if (requestInProgressRef.current) return;
         requestInProgressRef.current = true;
 
-        // ✅ Validation
         if (!name.trim() || !email.trim() || !telegram.trim() || !password.trim() || !confirmPassword.trim()) {
             requestInProgressRef.current = false;
-            addToast("Please fill in all fields", "error");
+            addToast("All fields required", "error");
             return;
         }
 
@@ -55,20 +54,18 @@ export default function Signup() {
             const data = await res.json();
 
             if (res.ok) {
-                // Show success toast
-                addToast("Profile created successfully! Redirecting to login...", "success", 2000);
+                addToast("Operator Registered Successfully", "success", 2000);
 
-                // Redirect to login after a short delay to let user see the toast
                 setTimeout(() => {
                     navigate("/login");
                 }, 2100);
             } else {
-                addToast(data.message || data.detail || "Signup failed", "error");
+                addToast(data.message || data.detail || "Registration Failed", "error");
             }
 
         } catch (err) {
             console.error(err);
-            addToast("Server error", "error");
+            addToast("System Error", "error");
         } finally {
             requestInProgressRef.current = false;
             setLoading(false);
@@ -76,98 +73,182 @@ export default function Signup() {
     };
 
     return (
-        <div className="relative min-h-screen flex items-center justify-center bg-gradient-to-br from-[#000000] via-[#020617] to-[#000000] text-white overflow-hidden">
+        <div className="relative min-h-screen flex items-center justify-center bg-black text-white overflow-hidden py-8">
 
-            {/* Glow */}
-            <div className="fixed top-[-120px] left-[-120px] w-[500px] h-[500px] bg-cyan-400 opacity-15 blur-[200px] rounded-full"></div>
-            <div className="fixed bottom-[-120px] right-[-120px] w-[500px] h-[500px] bg-purple-500 opacity-15 blur-[200px] rounded-full"></div>
-            <div className="fixed top-[40%] left-[30%] w-[300px] h-[300px] bg-indigo-500 opacity-10 blur-[180px] rounded-full"></div>
+            {/* Tactical Grid */}
+            <div className="tactical-grid opacity-10"></div>
 
-            <div className="relative z-10 p-[1.5px] rounded-xl bg-gradient-to-r from-cyan-400 to-purple-500">
-                <div className="bg-black p-8 rounded-xl w-[360px]">
+            {/* Gold Ambient Glow */}
+            <div className="absolute top-[-200px] left-[-200px] w-[600px] h-[600px] bg-[#D4AF37] opacity-5 blur-[150px] rounded-full"></div>
+            <div className="absolute bottom-[-200px] right-[-200px] w-[600px] h-[600px] bg-[#D4AF37] opacity-5 blur-[150px] rounded-full"></div>
 
-                    <h2 className="text-2xl font-bold mb-6 text-center bg-gradient-to-r from-cyan-400 to-purple-500 bg-clip-text text-transparent">
-                        Create Account
-                    </h2>
+            {/* Signup Card */}
+            <div className="relative z-10 w-full max-w-md mx-4">
+                
+                {/* Main Container */}
+                <div className="border border-[#8B7355] bg-[#0D0D0D] p-8 sm:p-10">
+                    
+                    {/* Header */}
+                    <div className="text-center mb-8">
+                        <div className="inline-flex items-center gap-2 mb-4">
+                            <Shield size={24} className="text-[#D4AF37]" />
+                            <h1 className="text-2xl font-bold text-white uppercase tracking-wider">WatchTower</h1>
+                        </div>
+                        <div className="h-px bg-gradient-to-r from-transparent via-[#D4AF37] to-transparent mb-4"></div>
+                        <p className="text-xs text-[#8B7355] uppercase tracking-[0.2em]">Operator Registration</p>
+                    </div>
 
+                    {/* Form */}
                     <form onSubmit={handleSignup} className="space-y-4">
-                        {/* Name */}
-                        <input
-                            type="text"
-                            placeholder="Full Name"
-                            value={name}
-                            required
-                            onChange={(e) => setName(e.target.value)}
-                            className="w-full p-3 bg-white/[0.05] border border-white/10 rounded-lg outline-none focus:border-cyan-400"
-                        />
+                        
+                        {/* Full Name */}
+                        <div className="flex flex-col gap-1.5">
+                            <label className="text-[10px] font-bold text-[#D4AF37] uppercase tracking-widest pl-1">
+                                Operator Name
+                            </label>
+                            <div className="relative group">
+                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                    <User size={18} className="text-[#8B7355] group-focus-within:text-[#D4AF37] transition-colors" />
+                                </div>
+                                <input
+                                    type="text"
+                                    placeholder="John Operator"
+                                    value={name}
+                                    required
+                                    onChange={(e) => setName(e.target.value)}
+                                    className="w-full pl-11 pr-4 py-3 bg-black border border-[#8B7355] text-white text-sm outline-none focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37]/30 transition-all placeholder:text-gray-700"
+                                />
+                            </div>
+                        </div>
 
                         {/* Email */}
-                        <input
-                            type="email"
-                            placeholder="Email"
-                            value={email}
-                            required
-                            onChange={(e) => setEmail(e.target.value)}
-                            className="w-full p-3 bg-white/[0.05] border border-white/10 rounded-lg outline-none focus:border-cyan-400"
-                        />
+                        <div className="flex flex-col gap-1.5">
+                            <label className="text-[10px] font-bold text-[#D4AF37] uppercase tracking-widest pl-1">
+                                Email Address
+                            </label>
+                            <div className="relative group">
+                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                    <Mail size={18} className="text-[#8B7355] group-focus-within:text-[#D4AF37] transition-colors" />
+                                </div>
+                                <input
+                                    type="email"
+                                    placeholder="operator@watchtower.ai"
+                                    value={email}
+                                    required
+                                    onChange={(e) => setEmail(e.target.value)}
+                                    className="w-full pl-11 pr-4 py-3 bg-black border border-[#8B7355] text-white text-sm outline-none focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37]/30 transition-all placeholder:text-gray-700"
+                                />
+                            </div>
+                        </div>
 
                         {/* Telegram Handle */}
-                        <input
-                            type="text"
-                            placeholder="Telegram Handle (e.g., @yourhandle)"
-                            value={telegram}
-                            required
-                            onChange={(e) => setTelegram(e.target.value)}
-                            className="w-full p-3 bg-white/[0.05] border border-white/10 rounded-lg outline-none focus:border-cyan-400"
-                        />
+                        <div className="flex flex-col gap-1.5">
+                            <label className="text-[10px] font-bold text-[#D4AF37] uppercase tracking-widest pl-1">
+                                Telegram Link
+                            </label>
+                            <div className="relative group">
+                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                    <MessageCircle size={18} className="text-[#8B7355] group-focus-within:text-[#D4AF37] transition-colors" />
+                                </div>
+                                <input
+                                    type="text"
+                                    placeholder="@yourhandle"
+                                    value={telegram}
+                                    required
+                                    onChange={(e) => setTelegram(e.target.value)}
+                                    className="w-full pl-11 pr-4 py-3 bg-black border border-[#8B7355] text-white text-sm outline-none focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37]/30 transition-all placeholder:text-gray-700"
+                                />
+                            </div>
+                        </div>
 
                         {/* Profile Picture URL */}
-                        <input
-                            type="text"
-                            placeholder="Profile Picture URL (Online or Local)"
-                            value={profilePic}
-                            onChange={(e) => setProfilePic(e.target.value)}
-                            className="w-full p-3 bg-white/[0.05] border border-white/10 rounded-lg outline-none focus:border-cyan-400"
-                        />
+                        <div className="flex flex-col gap-1.5">
+                            <label className="text-[10px] font-bold text-[#8B7355] uppercase tracking-widest pl-1">
+                                Avatar URL (Optional)
+                            </label>
+                            <div className="relative group">
+                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                    <Image size={18} className="text-[#8B7355] group-focus-within:text-[#D4AF37] transition-colors" />
+                                </div>
+                                <input
+                                    type="text"
+                                    placeholder="https://..."
+                                    value={profilePic}
+                                    onChange={(e) => setProfilePic(e.target.value)}
+                                    className="w-full pl-11 pr-4 py-3 bg-black border border-[#8B7355] text-white text-sm outline-none focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37]/30 transition-all placeholder:text-gray-700"
+                                />
+                            </div>
+                        </div>
 
                         {/* Password */}
-                        <input
-                            type="password"
-                            placeholder="Password"
-                            value={password}
-                            required
-                            onChange={(e) => setPassword(e.target.value)}
-                            className="w-full p-3 bg-white/[0.05] border border-white/10 rounded-lg outline-none focus:border-cyan-400"
-                        />
+                        <div className="flex flex-col gap-1.5">
+                            <label className="text-[10px] font-bold text-[#D4AF37] uppercase tracking-widest pl-1">
+                                Access Code
+                            </label>
+                            <div className="relative group">
+                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                    <Lock size={18} className="text-[#8B7355] group-focus-within:text-[#D4AF37] transition-colors" />
+                                </div>
+                                <input
+                                    type="password"
+                                    placeholder="Create secure code"
+                                    value={password}
+                                    required
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    className="w-full pl-11 pr-4 py-3 bg-black border border-[#8B7355] text-white text-sm outline-none focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37]/30 transition-all placeholder:text-gray-700"
+                                />
+                            </div>
+                        </div>
 
                         {/* Confirm Password */}
-                        <input
-                            type="password"
-                            placeholder="Confirm Password"
-                            value={confirmPassword}
-                            required
-                            onChange={(e) => setConfirmPassword(e.target.value)}
-                            className="w-full p-3 bg-white/[0.05] border border-white/10 rounded-lg outline-none focus:border-cyan-400"
-                        />
+                        <div className="flex flex-col gap-1.5">
+                            <label className="text-[10px] font-bold text-[#D4AF37] uppercase tracking-widest pl-1">
+                                Verify Code
+                            </label>
+                            <div className="relative group">
+                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                    <Lock size={18} className="text-[#8B7355] group-focus-within:text-[#D4AF37] transition-colors" />
+                                </div>
+                                <input
+                                    type="password"
+                                    placeholder="Confirm access code"
+                                    value={confirmPassword}
+                                    required
+                                    onChange={(e) => setConfirmPassword(e.target.value)}
+                                    className="w-full pl-11 pr-4 py-3 bg-black border border-[#8B7355] text-white text-sm outline-none focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37]/30 transition-all placeholder:text-gray-700"
+                                />
+                            </div>
+                        </div>
 
-                        {/* Button */}
+                        {/* Submit Button */}
                         <button
                             type="submit"
                             disabled={loading}
-                            className="w-full py-2 rounded-lg bg-gradient-to-r from-cyan-400 to-purple-500 text-black font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition"
+                            className={`w-full py-4 bg-gradient-to-r from-[#D4AF37] via-[#F4D03F] to-[#B8962E] text-black font-bold uppercase tracking-widest text-sm relative overflow-hidden group shadow-lg shadow-yellow-500/10 hover:shadow-yellow-500/20 active:scale-[0.98] transition-all mt-4 ${loading ? "opacity-50 cursor-not-allowed" : ""}`}
                         >
-                            {loading ? "Creating Account..." : "Create Account"}
+                            <span className="relative z-10">{loading ? "Registering Operator..." : "Register Operator"}</span>
+                            <div className="absolute inset-0 bg-white/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-500"></div>
                         </button>
                     </form>
 
-                    <p className="mt-6 text-sm text-center text-gray-400">
-                        Already have an account?
-                        <Link to="/login" className="ml-2 text-cyan-400 hover:underline">
-                            Login
+                    {/* Divider */}
+                    <div className="divider-gold"></div>
+
+                    {/* Login Link */}
+                    <p className="text-center text-sm text-gray-400">
+                        Already Registered?
+                        <Link to="/login" className="ml-2 text-[#D4AF37] hover:text-[#F4D03F] font-semibold transition-colors uppercase tracking-wide">
+                            Access Portal
                         </Link>
                     </p>
 
                 </div>
+
+                {/* Tactical Corner Markers */}
+                <div className="absolute top-0 left-0 w-8 h-8 border-l-2 border-t-2 border-[#D4AF37] opacity-60"></div>
+                <div className="absolute top-0 right-0 w-8 h-8 border-r-2 border-t-2 border-[#D4AF37] opacity-60"></div>
+                <div className="absolute bottom-0 left-0 w-8 h-8 border-l-2 border-b-2 border-[#D4AF37] opacity-60"></div>
+                <div className="absolute bottom-0 right-0 w-8 h-8 border-r-2 border-b-2 border-[#D4AF37] opacity-60"></div>
             </div>
         </div>
     );

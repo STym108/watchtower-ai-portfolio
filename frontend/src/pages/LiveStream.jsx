@@ -76,16 +76,16 @@ export default function LiveStream() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#000000] via-[#020617] to-[#000000] text-white overflow-x-hidden relative">
       {/* 🌌 Glow Background */}
-      <div className="fixed top-[-120px] left-[-120px] w-[500px] h-[500px] bg-cyan-400 opacity-15 blur-[200px] rounded-full"></div>
-      <div className="fixed bottom-[-120px] right-[-120px] w-[500px] h-[500px] bg-purple-500 opacity-15 blur-[200px] rounded-full"></div>
+      <div className="fixed top-[-120px] left-[-120px] w-[500px] h-[500px] bg-[#D4AF37] opacity-15 blur-[200px] rounded-full"></div>
+      <div className="fixed bottom-[-120px] right-[-120px] w-[500px] h-[500px] bg-[#B8962E] opacity-15 blur-[200px] rounded-full"></div>
 
       <Navbar />
 
-      <div className="relative z-10 max-w-4xl mx-auto pt-32 px-6">
-        <div className="p-[1.5px] rounded-2xl bg-gradient-to-r from-cyan-400 to-purple-500 shadow-2xl">
+      <div className="relative z-10 max-w-4xl mx-auto pt-32 sm:pt-40 px-6">
+        <div className="p-[1.5px] rounded-2xl bg-gradient-to-r from-[#D4AF37] to-[#B8962E] shadow-2xl">
           <div className="bg-black/90 backdrop-blur-xl rounded-2xl p-8 md:p-12">
             <div className="mb-8 text-center">
-              <h1 className="text-4xl font-bold bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-500 bg-clip-text text-transparent">
+              <h1 className="text-4xl font-bold bg-gradient-to-r from-[#D4AF37] via-[#F4D03F] to-[#B8962E] bg-clip-text text-transparent">
                 Live CCTV Stream
               </h1>
               <p className="text-gray-400 mt-3 text-lg">
@@ -99,7 +99,7 @@ export default function LiveStream() {
                 <select 
                   value={streamCount} 
                   onChange={(e) => setStreamCount(Number(e.target.value))}
-                  className="w-full p-4 bg-white/[0.05] border border-white/10 rounded-xl outline-none focus:border-cyan-400 transition-all text-white"
+                  className="w-full p-4 bg-white/[0.05] border border-white/10 rounded-xl outline-none focus:border-[#D4AF37] transition-all text-white"
                 >
                   <option value={1} className="bg-zinc-900">1 Stream (Solo View)</option>
                   <option value={2} className="bg-zinc-900">2 Streams (Double Pulse)</option>
@@ -119,7 +119,7 @@ export default function LiveStream() {
                         type="text"
                         value={cfg.name}
                         onChange={(e) => updateConfig(i, "name", e.target.value)}
-                        className="w-full p-3 bg-black border border-white/10 rounded-lg outline-none focus:border-cyan-400 transition-all font-mono text-cyan-300 text-sm"
+                        className="w-full p-3 bg-black border border-white/10 rounded-lg outline-none focus:border-[#D4AF37] transition-all font-mono text-[#F4D03F] text-sm"
                       />
                     </div>
                     <div className="space-y-2">
@@ -129,7 +129,7 @@ export default function LiveStream() {
                         value={cfg.url}
                         onChange={(e) => updateConfig(i, "url", e.target.value)}
                         placeholder="rtsp://... or http://..."
-                        className="w-full p-3 bg-black border border-white/10 rounded-lg outline-none focus:border-cyan-400 transition-all font-mono text-cyan-300 text-sm"
+                        className="w-full p-3 bg-black border border-white/10 rounded-lg outline-none focus:border-[#D4AF37] transition-all font-mono text-[#F4D03F] text-sm"
                       />
                     </div>
                   </div>
@@ -139,7 +139,7 @@ export default function LiveStream() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-4 rounded-xl bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-500 text-black font-bold text-lg shadow-lg shadow-cyan-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50"
+                className="w-full py-4 rounded-xl bg-gradient-to-r from-[#D4AF37] via-[#F4D03F] to-[#B8962E] text-black font-bold text-lg shadow-lg shadow-yellow-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50"
               >
                 {loading ? "Initializing Stream..." : "🚀 Activate Live Stream Trace"}
               </button>
@@ -147,7 +147,7 @@ export default function LiveStream() {
 
             <div className="mt-12 p-6 rounded-xl border border-white/5 bg-white/[0.02]">
               <h3 className="text-white font-semibold flex items-center gap-2 mb-4">
-                <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
+                <span className="w-2 h-2 rounded-full bg-[#D4AF37] animate-pulse"></span>
                 Tiled Multi-Monitor View
               </h3>
 

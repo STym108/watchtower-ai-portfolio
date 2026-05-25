@@ -100,8 +100,8 @@ export default function UploadDropzone() {
     return (
         <div className="w-full h-full flex items-center justify-center p-6 pt-10 bg-gradient-to-br from-black via-zinc-900 to-black text-white overflow-hidden relative">
             {/* Glow */}
-            <div className="absolute top-[-80px] left-[-80px] w-64 h-64 bg-cyan-500/15 rounded-full blur-3xl pointer-events-none"></div>
-            <div className="absolute bottom-[-80px] right-[-80px] w-64 h-64 bg-purple-500/15 rounded-full blur-3xl pointer-events-none"></div>
+            <div className="absolute top-[-80px] left-[-80px] w-64 h-64 bg-[#D4AF37]/15 rounded-full blur-3xl pointer-events-none"></div>
+            <div className="absolute bottom-[-80px] right-[-80px] w-64 h-64 bg-[#B8962E]/15 rounded-full blur-3xl pointer-events-none"></div>
 
             <div
                 onDragOver={(e) => {
@@ -110,16 +110,16 @@ export default function UploadDropzone() {
                 }}
                 onDragLeave={() => setDragging(false)}
                 onDrop={handleDrop}
-                className={`relative z-10 w-full max-w-xl rounded-3xl p-[1.5px] transition-all duration-300 bg-gradient-to-r from-cyan-400 to-purple-500 shadow-2xl ${dragging ? "scale-[1.01]" : ""
+                className={`relative z-10 w-full max-w-xl rounded-3xl p-[1.5px] transition-all duration-300 bg-gradient-to-r from-[#D4AF37] to-[#B8962E] shadow-2xl ${dragging ? "scale-[1.01]" : ""
                     }`}
             >
                 <div className="rounded-3xl bg-black/95 backdrop-blur-xl border border-white/10 px-8 py-10 text-center">
-                    <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-cyan-400/40 bg-cyan-400/10 px-4 py-1 text-sm text-cyan-300">
-                        <span className="inline-block h-2 w-2 rounded-full bg-cyan-400 animate-pulse"></span>
+                    <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-[#D4AF37]/40 bg-[#D4AF37]/10 px-4 py-1 text-sm text-[#F4D03F]">
+                        <span className="inline-block h-2 w-2 rounded-full bg-[#D4AF37] animate-pulse"></span>
                         Media Mode
                     </div>
 
-                    <h2 className="text-3xl font-bold bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-500 bg-clip-text text-transparent">
+                    <h2 className="text-3xl font-bold bg-gradient-to-r from-[#D4AF37] via-[#F4D03F] to-[#B8962E] bg-clip-text text-transparent">
                         Upload Video
                     </h2>
 
@@ -137,7 +137,7 @@ export default function UploadDropzone() {
 
                     <div
                         className={`mt-8 rounded-2xl border-2 border-dashed px-6 py-10 transition-all duration-300 ${dragging
-                            ? "border-cyan-400 bg-cyan-400/10"
+                            ? "border-[#D4AF37] bg-[#D4AF37]/10"
                             : "border-white/10 bg-white/[0.03]"
                             }`}
                     >
@@ -145,7 +145,7 @@ export default function UploadDropzone() {
 
                         {loading ? (
                             <div className="mt-6">
-                                <p className="text-cyan-400 text-lg font-medium animate-pulse">
+                                <p className="text-[#D4AF37] text-lg font-medium animate-pulse">
                                     Processing video...
                                 </p>
                                 <p className="mt-2 text-sm text-gray-400">
@@ -156,7 +156,7 @@ export default function UploadDropzone() {
                             <>
                                 <button
                                     onClick={checkLoginAndUpload}
-                                    className="mt-6 px-6 py-3 rounded-xl bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-500 text-black font-semibold shadow-lg shadow-cyan-500/20 hover:scale-105 transition"
+                                    className="mt-6 px-6 py-3 rounded-xl bg-gradient-to-r from-[#D4AF37] via-[#F4D03F] to-[#B8962E] text-black font-semibold shadow-lg shadow-yellow-500/20 hover:scale-105 transition"
                                 >
                                     Upload Video
                                 </button>

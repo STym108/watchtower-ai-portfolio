@@ -13,7 +13,7 @@ export default function Toast() {
       case "error":
         return "text-red-400";
       case "info":
-        return "text-blue-400";
+        return "text-[#D4AF37]";
       default:
         return "text-gray-400";
     }
@@ -26,7 +26,7 @@ export default function Toast() {
       case "error":
         return "bg-red-500/10 border-red-400/30";
       case "info":
-        return "bg-blue-500/10 border-blue-400/30";
+        return "bg-[#D4AF37]/10 border-[#D4AF37]/30";
       default:
         return "bg-gray-500/10 border-gray-400/30";
     }

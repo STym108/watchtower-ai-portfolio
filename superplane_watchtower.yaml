@@ -1,0 +1,61 @@
+apiVersion: v1
+kind: Canvas
+metadata:
+  name: "WatchTower Continuous SOAR: Telegram & Trace"
+spec:
+  nodes:
+    # ---------------------------------------------
+    # 1. The Entrypoint Trigger from our Python script
+    # ---------------------------------------------
+    - id: incoming-alert-trigger
+      name: "watchtower-webhook"
+      type: "TYPE_TRIGGER"
+      trigger:
+        name: "webhook" # Built-in SuperPlane component
+        configuration:
+          path: "/watchtower-intel"
+
+    # ---------------------------------------------
+    # 2. Automated Retroactive Path Tracing Call!
+    # (Forces the pipeline to reconstruct the path before Telegramming)
+    # ---------------------------------------------
+    - id: execute-auto-trace
+      name: "run-trace-api"
+      type: "TYPE_COMPONENT"
+      component:
+        name: "http" 
+        configuration:
+          method: "POST"
+          # Docker magic internal-route mapping!
+          url: "http://host.docker.internal:8000/api/trace"
+          headers:
+            "Content-Type": "application/json"
+          body: "{\"query\": \"{{trigger.payload.query_param}}\"}"
+          
+    # ---------------------------------------------
+    # 3. Formulate Telegram Blast utilizing outputs of BOTH Node 1 and Node 2!
+    # ---------------------------------------------
+    - id: broadcast-to-squad
+      name: "dispatch-swat-telegram"
+      type: "TYPE_COMPONENT"
+      component:
+        name: "http" 
+        configuration:
+          method: "POST"
+          url: "https://api.telegram.org/botYOUR_BOT_TOKEN_HERE/sendMessage"
+          headers:
+            "Content-Type": "application/json"
+          body: |
+            {
+              "chat_id": "YOUR_CHAT_ID_HERE",
+              "text": "🚁 OVERWATCH EVENT: Suspect Status Update 🚨\nTarget Identifier: {{trigger.payload.query_param}}\nSector Matrix transition detected: From[{{trigger.payload.previous_node}}] into [{{trigger.payload.current_node}}]\n\n[ SKYNET CHRONOLOGICAL TRACK MATRIX ]: \n{{steps.execute-auto-trace.response.body.incident_report}}"
+            }
+
+  edges:
+    # Connect Trigger -> Tracker -> Telegram
+    - sourceId: "incoming-alert-trigger"
+      targetId: "execute-auto-trace"
+      channel: default
+    - sourceId: "execute-auto-trace"
+      targetId: "broadcast-to-squad"
+      channel: default

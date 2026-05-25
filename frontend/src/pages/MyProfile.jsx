@@ -31,35 +31,36 @@ export default function MyProfile() {
         fetchProfile();
     }, [navigate]);
 
-    if (loading) return <div className="min-h-screen bg-black flex items-center justify-center text-cyan-400">Loading Profile...</div>;
-    if (!user) return <div className="min-h-screen bg-black flex items-center justify-center text-red-400">User not found.</div>;
+    if (loading) return <div className="min-h-screen bg-black flex items-center justify-center text-[#D4AF37]">Loading Profile...</div>;
+    if (!user) return <div className="min-h-screen bg-black flex items-center justify-center text-red-500">User not found.</div>;
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-black via-zinc-900 to-black text-white relative overflow-hidden">
 
             <Navbar />
 
-            {/* 🌌 Glow Background */}
-            <div className="absolute top-[-120px] left-[-120px] w-[500px] h-[500px] bg-cyan-500 opacity-10 blur-[150px] rounded-full"></div>
-            <div className="absolute bottom-[-120px] right-[-120px] w-[500px] h-[500px] bg-purple-500 opacity-10 blur-[150px] rounded-full"></div>
+            {/* 🌌 Subtle Glow (reduced brightness for darker feel) */}
+            <div className="absolute top-[-120px] left-[-120px] w-[500px] h-[500px] bg-[#D4AF37] opacity-15 blur-[200px] rounded-full"></div>
+            <div className="absolute bottom-[-120px] right-[-120px] w-[500px] h-[500px] bg-[#B8962E] opacity-15 blur-[200px] rounded-full"></div>
+            <div className="absolute top-[40%] left-[30%] w-[300px] h-[300px] bg-[#8B7355] opacity-10 blur-[180px] rounded-full"></div>
 
-            <div className="relative z-10 max-w-4xl mx-auto pt-28 px-4">
+            <div className="relative z-10 max-w-4xl mx-auto pt-32 sm:pt-40 px-4">
 
                 {/* 🔥 Heading */}
-                <h2 className="text-4xl font-bold text-center mb-10 pb-5 bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-500 bg-clip-text text-transparent">
+                <h2 className="text-4xl font-bold text-center mb-10 pb-5 bg-gradient-to-r from-[#D4AF37] via-[#F4D03F] to-[#B8962E] bg-clip-text text-transparent">
                     My Profile
                 </h2>
 
                 {/* 📊 Profile Card */}
-                <div className="p-[1.5px] rounded-2xl bg-gradient-to-r from-cyan-400 to-purple-500">
+                <div className="p-[1.5px] rounded-2xl bg-gradient-to-r from-[#D4AF37] to-[#B8962E]">
                     <div className="bg-black rounded-2xl p-8 space-y-6">
 
                         {/* Profile Pic & Name */}
                         <div className="flex flex-col items-center border-b border-white/10 pb-6">
                             {user.profile_picture ? (
-                                <img src={user.profile_picture} alt="profile" className="w-24 h-24 rounded-full object-cover border-2 border-cyan-400 shadow-lg shadow-cyan-400/20" />
+                                <img src={user.profile_picture} alt="profile" className="w-24 h-24 rounded-full object-cover border-2 border-[#D4AF37] shadow-lg shadow-yellow-500/20" />
                             ) : (
-                                <div className="w-24 h-24 rounded-full bg-black border-2 border-cyan-400 flex items-center justify-center text-4xl font-bold text-cyan-400">
+                                <div className="w-24 h-24 rounded-full bg-black border-2 border-[#D4AF37] flex items-center justify-center text-4xl font-bold text-[#D4AF37]">
                                     {user.full_name ? user.full_name[0].toUpperCase() : "U"}
                                 </div>
                             )}
@@ -76,7 +77,7 @@ export default function MyProfile() {
                         {/* Telegram */}
                         <div className="flex justify-between border-b border-white/10 pb-4">
                             <span className="text-gray-400">Telegram</span>
-                            <span className="text-cyan-400">{user.telegram_handle || "@your_handle"}</span>
+                            <span className="text-[#D4AF37]">{user.telegram_handle || "@your_handle"}</span>
                         </div>
 
                         {/* 📈 Stats */}
@@ -84,25 +85,23 @@ export default function MyProfile() {
 
                             <div className="p-5 rounded-xl bg-white/[0.03] border border-white/10 text-center">
                                 <p className="text-gray-400 text-sm">Account Status</p>
-                                <p className="text-2xl font-bold text-cyan-400">
+                                <p className="text-2xl font-bold text-[#D4AF37]">
                                     {user.is_active ? "Active" : "Inactive"}
                                 </p>
                             </div>
 
                             <div className="p-5 rounded-xl bg-white/[0.03] border border-white/10 text-center">
                                 <p className="text-gray-400 text-sm">Member Since</p>
-                                <p className="text-lg font-semibold text-purple-400">
+                                <p className="text-lg font-semibold text-[#B8962E]">
                                     {new Date(user.created_at).toLocaleDateString()}
                                 </p>
                             </div>
 
                             <div className="p-5 rounded-xl bg-white/[0.03] border border-white/10 text-center">
-                                <p className="text-gray-400 text-sm">Last Upload</p>
-                                <p className="text-lg font-semibold text-purple-400">
+                                <p className="text-lg font-semibold text-[#B8962E]">
                                     {user.lastUpload}
                                 </p>
                             </div>
-
                         </div>
 
                         {/* 🔘 Buttons Section */}
@@ -111,7 +110,7 @@ export default function MyProfile() {
                             {/* Update Profile */}
                             <button
                                 onClick={() => navigate("/me/edit")}
-                                className="flex-1 py-3 rounded-lg bg-gradient-to-r from-cyan-400 to-purple-500 text-black font-semibold hover:scale-105 transition"
+                                className="flex-1 py-3 rounded-lg bg-gradient-to-r from-[#D4AF37] to-[#B8962E] text-black font-semibold hover:scale-105 transition"
                             >
                                 Update Profile
                             </button>
@@ -119,7 +118,7 @@ export default function MyProfile() {
                             {/* 🔥 Create Alert */}
                             <button
                                 onClick={() => navigate("/alerts/create")}
-                                className="flex-1 py-3 rounded-lg border border-cyan-400/40 text-cyan-400 font-semibold hover:bg-cyan-400/10 transition"
+                                className="flex-1 py-3 rounded-lg border border-[#D4AF37]/40 text-[#D4AF37] font-semibold hover:bg-[#D4AF37]/10 transition"
                             >
                                 + Create Alert
                             </button>

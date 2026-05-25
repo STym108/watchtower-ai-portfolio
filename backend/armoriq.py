@@ -108,7 +108,16 @@ class ArmorIQGuard:
                     plan = self.client.capture_plan(
                         llm="gemini-1.5-flash",
                         prompt=query,
-                        metadata={"context": context, "reason": reason}
+                        plan={
+                            "goal": f"Evaluate and execute safe query: {query}",
+                            "steps": [
+                                {
+                                    "action": "execute_query",
+                                    "mcp": "watchtower-mcp",
+                                    "params": {"query": query, "context": context}
+                                }
+                            ]
+                        }
                     )
                     intent_token = f"TOKEN_{plan.plan.get('hash', 'A1B2')[:8]}"
                 except Exception as sdk_err:

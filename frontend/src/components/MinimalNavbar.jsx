@@ -101,13 +101,13 @@ export default function MinimalNavbar() {
       <div className="absolute inset-0 bg-gradient-to-r from-black via-zinc-900 to-black opacity-95 backdrop-blur-xl"></div>
 
       {/* Glow Line */}
-      <div className="absolute bottom-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-cyan-400 to-purple-500 opacity-40"></div>
+      <div className="absolute bottom-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-[#D4AF37] to-[#B8962E] opacity-40"></div>
 
       {/* Content */}
       <div className="relative max-w-7xl mx-auto flex items-center justify-between px-4 md:px-8 py-4 gap-4">
         {/* Left: Logo */}
         <Link to="/" className="flex items-center justify-start gap-3">
-          <h1 className="text-xl md:text-2xl font-bold bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-500 bg-clip-text text-transparent shrink-0">
+          <h1 className="text-xl md:text-2xl font-bold bg-gradient-to-r from-[#D4AF37] via-[#F4D03F] to-[#B8962E] bg-clip-text text-transparent shrink-0">
             WatchTower AI
           </h1>
         </Link>
@@ -117,13 +117,13 @@ export default function MinimalNavbar() {
           <div className="hidden md:flex items-center justify-center gap-8 text-base font-semibold">
             <Link
               to="/dashboard"
-              className="bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent hover:from-cyan-400 hover:to-purple-500 transition"
+              className="bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent hover:from-[#D4AF37] hover:to-[#F4D03F] transition"
             >
               Dashboard
             </Link>
             <Link
               to="/tripwires"
-              className="bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent hover:from-cyan-400 hover:to-purple-500 transition"
+              className="bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent hover:from-[#D4AF37] hover:to-[#F4D03F] transition"
             >
               Alerts
             </Link>
@@ -138,7 +138,7 @@ export default function MinimalNavbar() {
               <div className="relative shrink-0">
                 <div
                   onClick={handleNotificationClick}
-                  className="p-[1.5px] rounded-full bg-gradient-to-r from-cyan-400 to-purple-500 cursor-pointer"
+                  className="p-[1.5px] rounded-full bg-gradient-to-r from-[#D4AF37] to-[#B8962E] cursor-pointer"
                 >
                   <div className="w-9 h-9 rounded-full bg-black flex items-center justify-center text-white hover:scale-105 transition">
                     <Bell size={18} />
@@ -157,7 +157,7 @@ export default function MinimalNavbar() {
                       <span className="text-sm text-gray-400">Notifications</span>
                       <button
                         onClick={clearNotifications}
-                        className="text-xs text-cyan-400 hover:underline"
+                        className="text-xs text-[#D4AF37] hover:underline"
                       >
                         Clear
                       </button>
@@ -229,7 +229,7 @@ export default function MinimalNavbar() {
               {/* Profile */}
               <button
                 onClick={handleProfileClick}
-                className="p-[1.5px] rounded-full bg-gradient-to-r from-cyan-400 to-purple-500 hover:scale-105 transition shrink-0"
+                className="p-[1.5px] rounded-full bg-gradient-to-r from-[#D4AF37] to-[#B8962E] hover:scale-105 transition shrink-0"
               >
                 <div className="w-9 h-9 rounded-full bg-black flex items-center justify-center text-white">
                   <User size={18} />
@@ -240,14 +240,14 @@ export default function MinimalNavbar() {
             <>
               {/* Login */}
               <Link to="/login">
-                <button className="px-4 py-2 rounded-lg font-semibold text-white hover:text-cyan-400 transition-colors duration-300">
+                <button className="px-4 py-2 rounded-lg font-semibold text-white hover:text-[#D4AF37] transition-colors duration-300">
                   Login
                 </button>
               </Link>
               {/* Sign Up */}
               <Link to="/signup">
-                <div className="p-[1.5px] rounded-lg bg-gradient-to-r from-cyan-400 to-purple-500">
-                  <button className="px-4 py-2 rounded-lg bg-black font-semibold text-white hover:bg-gradient-to-r hover:from-cyan-400 hover:to-purple-500 transition-all duration-300">
+                <div className="p-[1.5px] rounded-lg bg-gradient-to-r from-[#D4AF37] to-[#B8962E]">
+                  <button className="px-4 py-2 rounded-lg bg-black font-semibold text-white hover:bg-gradient-to-r hover:from-[#D4AF37] hover:to-[#B8962E] transition-all duration-300">
                     Sign Up
                   </button>
                 </div>

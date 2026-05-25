@@ -11,7 +11,7 @@ export default function TripWireTable({ alerts, telegramHandle }) {
             {alerts.map((alert) => (
                 <div
                     key={alert.id}
-                    className="p-6 rounded-xl bg-white/[0.03] backdrop-blur border border-white/10 hover:border-purple-400 transition"
+                    className="p-6 rounded-xl bg-white/[0.03] backdrop-blur border border-white/10 hover:border-[#D4AF37] transition"
                 >
                     <div className="flex justify-between items-center">
 
@@ -25,7 +25,7 @@ export default function TripWireTable({ alerts, telegramHandle }) {
 
                     <p className="text-sm text-gray-400 mt-2">
                         Routing notifications to{" "}
-                        <span className="text-cyan-400">
+                        <span className="text-[#D4AF37]">
                             {telegramHandle}
                         </span>
                     </p>
