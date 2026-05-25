@@ -33,11 +33,11 @@ export default function ChatPanel() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  const handleSpeak = async (text, id, lang = "en") => {
+  const handleSpeak = async (text, id) => {
     try {
       setSpeakingId(id);
-      await axios.post("http://localhost:8000/api/speak", { text, lang });
-      setTimeout(() => setSpeakingId(null), 3000);
+      await axios.post("http://localhost:8000/api/speak", { text });
+      setTimeout(() => setSpeakingId(null), 2000);
     } catch (err) {
       console.error("Speech failed:", err);
       setSpeakingId(null);
@@ -191,36 +191,18 @@ export default function ChatPanel() {
               )}
 
               {msg.type === "ai" && (
-                <div className="flex items-center gap-1.5 border border-[#8B7355] p-1.5 bg-black/45 self-start">
-                  <span className="text-[10px] text-[#8B7355] px-1 font-bold uppercase tracking-wider flex items-center gap-1">
-                    <Mic size={10} className="text-[#8B7355]" />
-                    <span>Voice:</span>
-                  </span>
-                  {[
-                    { code: "en", label: "ENG" },
-                    { code: "hi", label: "HIN" },
-                    { code: "pa", label: "PAN" },
-                    { code: "bn", label: "BEN" },
-                    { code: "ta", label: "TAM" },
-                    { code: "es", label: "ESP" }
-                  ].map((lang) => (
-                    <button
-                      key={lang.code}
-                      disabled={speakingId === msg.id}
-                      onClick={() => handleSpeak(msg.text, msg.id, lang.code)}
-                      className={`text-[9px] font-bold px-2 py-1 border transition-all uppercase tracking-wider ${
-                        speakingId === msg.id
-                          ? "opacity-50 cursor-not-allowed border-transparent text-gray-500"
-                          : "bg-transparent border-[#8B7355]/40 text-[#8B7355] hover:border-[#D4AF37] hover:text-[#D4AF37] hover:bg-[#D4AF37]/5"
-                      }`}
-                    >
-                      {lang.label}
-                    </button>
-                  ))}
-                  {speakingId === msg.id && (
-                    <span className="text-[9px] text-[#D4AF37] animate-pulse font-bold tracking-widest pl-1">SPEAKING...</span>
-                  )}
-                </div>
+                <button
+                  className={`flex items-center gap-1.5 text-[10px] font-bold py-1.5 px-3 transition-all uppercase tracking-wide border ${
+                    speakingId === msg.id 
+                      ? "bg-[#D4AF37] text-black border-[#D4AF37] animate-pulse" 
+                      : "bg-transparent border-[#8B7355] text-[#8B7355] hover:border-[#D4AF37] hover:text-[#D4AF37]"
+                  }`}
+                  onClick={() => handleSpeak(msg.text, msg.id)}
+                  title="Audio Output"
+                >
+                  <Mic size={10} />
+                  <span>{speakingId === msg.id ? "Speaking..." : "Audio"}</span>
+                </button>
               )}
             </div>
           </div>

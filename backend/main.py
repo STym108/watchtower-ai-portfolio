@@ -188,7 +188,6 @@ class LivestreamRequest(BaseModel): streams: List[StreamConfig]
 class QueryRequest(BaseModel): query: str
 class SpeakRequest(BaseModel):
     text: str
-    lang: Optional[str] = "en"
 
 # =====================================================================
 # 4. API ENDPOINTS - AUTHENTICATION
@@ -529,7 +528,7 @@ async def manual_speak(req: SpeakRequest):
     This uses the 'clean_text_for_speech' filter to strip Markdown (**, ###).
     """
     try:
-        speak_alarm(req.text, lang=req.lang or "en")
+        speak_alarm(req.text)
         return {"status": "success", "message": "Voice triggered successfully."}
     except Exception as e:
         return {"status": "error", "message": str(e)}
@@ -763,64 +762,20 @@ def clean_text_for_speech(text: str) -> str:
     text = text.replace("\n", " ").strip()
     return text
 
-def speak_alarm(phrase: str, lang: str = "en"):
+def speak_alarm(phrase: str):
     """
     Text-to-speech alarm using offline pyttsx3.
-    Translates phrase into target language using Gemini model, 
-    and sets the corresponding OS voice if available.
+    Runs in a background thread to prevent UI freezing.
     """
     def _speak():
         try:
-            # 1. Translate the text if the language is not English
-            translated_phrase = phrase
-            if lang != "en":
-                # Map code to language name
-                lang_map = {
-                    "hi": "Hindi",
-                    "pa": "Punjabi",
-                    "bn": "Bengali",
-                    "ta": "Tamil",
-                    "es": "Spanish"
-                }
-                lang_name = lang_map.get(lang)
-                if lang_name and ml_engine and ml_engine.vlm_client:
-                    try:
-                        prompt = f"Translate the following text into fluent, natural {lang_name} for text-to-speech. Return ONLY the translation, no commentary: \"{phrase}\""
-                        response = ml_engine.vlm_client.models.generate_content(
-                            model=ml_engine.vlm_model_name, contents=[prompt]
-                        )
-                        translated_phrase = response.text.strip()
-                    except Exception as trans_err:
-                        print(f"⚠️ [Voice Engine] Translation to {lang_name} failed: {trans_err}")
-
-            # 2. Clean the phrase before speaking
-            clean_phrase = clean_text_for_speech(translated_phrase)
+            # Clean the phrase before speaking
+            clean_phrase = clean_text_for_speech(phrase)
             
-            print(f"🤖 [Voice Engine] Speaking in [{lang}] offline pyttsx3: '{clean_phrase}'")
+            print("🤖 [Voice Engine] Using offline pyttsx3.")
             import pyttsx3
             engine = pyttsx3.init()
             engine.setProperty('rate', 160) 
-            
-            # 3. Locate system voice matching the selected language prefix
-            voices = engine.getProperty('voices')
-            selected_voice = None
-            
-            # Match language prefix (e.g. 'hi', 'bn', 'ta', 'es')
-            for voice in voices:
-                if any(v.startswith(lang) for v in voice.languages):
-                    selected_voice = voice.id
-                    break
-                    
-            # Set voice if found
-            if selected_voice:
-                engine.setProperty('voice', selected_voice)
-            else:
-                # Local fallback to Indian English voice for regional languages if not installed
-                for voice in voices:
-                    if any(v.startswith("en_IN") for v in voice.languages):
-                        engine.setProperty('voice', voice.id)
-                        break
-
             engine.say(clean_phrase)
             engine.runAndWait()
             engine.stop()
