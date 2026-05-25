@@ -759,37 +759,14 @@ def clean_text_for_speech(text: str) -> str:
 
 def speak_alarm(phrase: str):
     """
-    Text-to-speech alarm using high-quality ElevenLabs API.
-    If the API fails (no credit, no internet), instantly falls back to pyttsx3.
+    Text-to-speech alarm using offline pyttsx3.
     Runs in a background thread to prevent UI freezing.
     """
     def _speak():
         try:
-            import os
             # Clean the phrase before speaking
             clean_phrase = clean_text_for_speech(phrase)
             
-            # --- Primary Engine: ElevenLabs ---
-            eleven_key = os.getenv("ELEVENLABS_API_KEY")
-            if eleven_key:
-                try:
-                    from elevenlabs.client import ElevenLabs
-                    from elevenlabs.play import play
-                    
-                    print("🎧 [Voice Engine] Attempting ElevenLabs API...")
-                    client = ElevenLabs(api_key=eleven_key)
-                    audio = client.text_to_speech.convert(
-                        voice_id="CwhRBWXzGAHq8TQ4Fs17", 
-                        text=clean_phrase,
-                        model_id="eleven_multilingual_v2",
-                    )
-                    play(audio)
-                    print("✅ [Voice Engine] ElevenLabs play complete.")
-                    return  # Exit early since ElevenLabs succeeded
-                except Exception as eval_err:
-                    print(f"⚠️ [Voice Engine] ElevenLabs failed ({eval_err}). Falling back to Robot Voice...")
-            
-            # --- Fallback Engine: pyttsx3 ---
             print("🤖 [Voice Engine] Using offline pyttsx3.")
             import pyttsx3
             engine = pyttsx3.init()
