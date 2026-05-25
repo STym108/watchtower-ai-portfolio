@@ -22,11 +22,12 @@ class OfflineVideoPipeline:
         self.model = self.model.to(self.device)
         self.tokenizer = open_clip.get_tokenizer('ViT-B-32')
         
+        os.makedirs("./data/vector_db", exist_ok=True)
         self.chroma_client = chromadb.PersistentClient(path="./data/vector_db")
         self.collection = self.chroma_client.get_or_create_collection(name=collection_name)
         
         self.vlm_client = genai.Client(api_key=api_key)
-        self.vlm_model_name = "gemini-2.5" # Use high-end model for complex reasoning
+        self.vlm_model_name = "gemini-2.5-flash" # Use flash model for speed and complex reasoning
         self.io_pool = concurrent.futures.ThreadPoolExecutor(max_workers=8)
         
         self.ai_queue = queue.Queue(maxsize=128)

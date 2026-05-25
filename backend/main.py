@@ -61,6 +61,7 @@ notifier = ConnectionManager()
 os.makedirs("data", exist_ok=True)
 os.makedirs("data/frames", exist_ok=True)
 os.makedirs("data/videos", exist_ok=True)
+os.makedirs("data/vector_db", exist_ok=True)
 
 app = FastAPI(title="WatchTower.ai Backend")
 
