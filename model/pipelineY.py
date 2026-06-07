@@ -2,20 +2,15 @@
 pipeline.py — WatchTower.ai Unified ML Engine
 ==============================================
 Merges:
-  CUDA/OpenMP acceleration (VRAM preprocessing, cosine search, entropy gate)
-  find_suspect_by_image now fully CUDA-accelerated with multimodal vector fusion kernel
+  Hardware acceleration (device-side preprocessing)
+  find_suspect_by_image now fully hardware-accelerated with multimodal vector fusion
   All IO-bound VLM calls cached and images resized before send (quota saving)
-
-RTX 3000 series (Ampere sm_86) tuning preserved throughout.
 """
 
 import os
 import sys
 import time
 import shutil
-import subprocess
-import threading
-import queue
 import concurrent.futures
 import hashlib
 
@@ -32,46 +27,11 @@ os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "tls_verify;0"
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 1.  Motion Entropy Calculation (Pure PyTorch Vectorized)
+# 1.  Vector Modality Fusion (Pure PyTorch Vectorized)
 # ──────────────────────────────────────────────────────────────────────────────
-def _compute_entropy_hardware(prev: torch.Tensor, curr: torch.Tensor,
-                               noise_floor: float,
-                               shift_threshold: float) -> tuple[bool, float]:
-    """
-    Computes the ratio of pixels that changed between prev and curr frames.
-    Runs on the active PyTorch device (CPU/CUDA/MPS) automatically.
-    """
-    with torch.no_grad():
-        diff_mask = torch.abs(curr - prev) > noise_floor
-        ratio = diff_mask.float().mean().item()
-        motion_detected = ratio >= shift_threshold
-    return motion_detected, ratio
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# 2.  In-VRAM Cosine Similarity Search (Pure PyTorch Vectorized)
-# ──────────────────────────────────────────────────────────────────────────────
-def _cuda_topk_cosine(query_vec: "torch.Tensor",
-                      candidate_vecs: "torch.Tensor",
-                      top_k: int) -> "torch.Tensor":
-    """
-    Performs cosine similarity search directly in device VRAM using PyTorch.
-    query_vec:      [D]    — L2-normalised
-    candidate_vecs: [N, D] — L2-normalised
-    Returns: LongTensor [k] of most-similar indices.
-    """
-    with torch.no_grad():
-        sims = candidate_vecs @ query_vec          # [N] dot products
-        k    = min(top_k, sims.shape[0])
-        return torch.topk(sims, k).indices
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# 3.  Vector Modality Fusion (Pure PyTorch Vectorized)
-# ──────────────────────────────────────────────────────────────────────────────
-def _cuda_fuse_modalities(image_vec: "torch.Tensor",
-                           text_vec: "torch.Tensor | None",
-                           image_weight: float = 0.5) -> "torch.Tensor":
+def _fuse_modalities(image_vec: "torch.Tensor",
+                     text_vec: "torch.Tensor | None",
+                     image_weight: float = 0.5) -> "torch.Tensor":
     """
     Weighted multimodal fusion + L2 renormalization using standard PyTorch.
     Returns image_vec unchanged if text_vec is None.
@@ -115,8 +75,8 @@ class OfflineVideoPipeline:
         )
         self.model = self.model.to(self.device).eval()
         self.tokenizer = open_clip.get_tokenizer('ViT-B-32')
-        # ── GPU-side preprocessing ────────────────────────────────────────────
-        self.gpu_preprocess = T.Compose([
+        # ── Device-side preprocessing ────────────────────────────────────────────
+        self.device_preprocess = T.Compose([
             T.Resize(224, antialias=True),
             T.CenterCrop(224),
             T.Normalize(
@@ -138,10 +98,6 @@ class OfflineVideoPipeline:
         # Default collection (for track_timeline which has no is_stream context)
         self.default_collection_name = collection_name
 
-        # ── VRAM embedding cache ──────────────────────────────────────────────
-        # frame_path → normalised [D] tensor on device.
-        self._embed_cache: dict[str, torch.Tensor] = {}
-
         # ── VLM ──────────────────────────────────────────────────────────────
         self.vlm_client     = genai.Client(api_key=api_key)
         self.vlm_model_name = "gemini-2.5-flash"
@@ -149,11 +105,6 @@ class OfflineVideoPipeline:
 
         # ── Async I/O pool ───────────────────────────────────────────────────
         self.io_pool = concurrent.futures.ThreadPoolExecutor(max_workers=10)
-        self.ai_queue = queue.Queue(maxsize=128)
-        self._worker_thread = threading.Thread(
-            target=self._ai_worker, daemon=True
-        )
-        self._worker_thread.start()
 
 
 
@@ -165,7 +116,7 @@ class OfflineVideoPipeline:
         """BGR numpy frame → normalised CHW float tensor on device."""
         hw = torch.from_numpy(frame_bgr).permute(2, 0, 1).float().to(self.device)
         hw = hw[[2, 1, 0], ...] / 255.0
-        return self.gpu_preprocess(hw)
+        return self.device_preprocess(hw)
 
     def _encode_image_tensor(self, tensor: torch.Tensor) -> torch.Tensor:
         """Single preprocessed CHW tensor → normalised [D] vec on device."""
@@ -183,11 +134,10 @@ class OfflineVideoPipeline:
         return feat.squeeze(0)
 
     def _store_batch_hardware(self, tensor_list: list,
-                               metadatas: list, ids: list,
-                               collection_name: str):
+                              metadatas: list, ids: list,
+                              collection_name: str):
         """
-        Stacks device tensors, CLIP-encodes, upserts to named collection.
-        Also populates VRAM cache for later CUDA cosine search.
+        Stacks device tensors, CLIP-encodes, and upserts to ChromaDB.
         """
         if not tensor_list:
             return
@@ -196,37 +146,11 @@ class OfflineVideoPipeline:
             features = self.model.encode_image(tensors)
             features /= features.norm(dim=-1, keepdim=True)
 
-        for feat, meta in zip(features, metadatas):
-            self._embed_cache[meta["frame_path"]] = feat.detach()
-
         col = self.chroma_client.get_or_create_collection(
             name=collection_name, metadata={"hnsw:space": "cosine"}
         )
         col.add(embeddings=features.cpu().tolist(), metadatas=metadatas, ids=ids)
         print(f"💾 Stored {len(tensor_list)} frames → [{collection_name}] | total: {col.count()}")
-
-    def _store_batch(self, images: list, metadatas: list, ids: list, collection_name: str | None = None):
-        """
-        Legacy/WIP compatibility helper. Converts PIL Images/BGR arrays to hardware tensors 
-        and calls _store_batch_hardware.
-        """
-        if collection_name is None:
-            collection_name = self.default_collection_name
-        
-        tensor_list = []
-        for img in images:
-            if isinstance(img, Image.Image):
-                import numpy as np
-                img_np = np.array(img.convert("RGB"))
-                img_bgr = img_np[:, :, ::-1].copy()
-                tensor_list.append(self._convert_cv2_to_hardware_tensor(img_bgr))
-            elif isinstance(img, np.ndarray):
-                tensor_list.append(self._convert_cv2_to_hardware_tensor(img))
-            elif torch.is_tensor(img):
-                tensor_list.append(img.to(self.device))
-        
-        self._store_batch_hardware(tensor_list, metadatas, ids, collection_name)
-
 
     def _vlm_query(self, cache_key: str, contents: list) -> str:
         """VLM call with MD5-keyed cache to save quota."""
@@ -246,134 +170,20 @@ class OfflineVideoPipeline:
         pil_img.thumbnail((max_side, max_side), Image.LANCZOS)
         return pil_img
 
-    @staticmethod
-    def _resolve_youtube_url(url: str) -> str | None:
-        try:
-            result = subprocess.run(
-                ["yt-dlp", "-g", url],
-                capture_output=True, text=True, check=True
-            )
-            return result.stdout.strip().split('\n')[0]
-        except Exception as e:
-            print(f"yt-dlp failed: {e}")
-            return None
-
     def _get_collection(self, collection_name: str):
         return self.chroma_client.get_or_create_collection(
             name=collection_name, metadata={"hnsw:space": "cosine"}
         )
 
-    def _cuda_query(self, query_vec: torch.Tensor,
-                    top_k: int,
-                    where_filter: dict | None,
-                    collection_name: str) -> dict | None:
-        """
-        VRAM-resident cosine search when cache is warm.
-        Falls back to None so caller can use ChromaDB instead.
-        """
-        if len(self._embed_cache) < top_k:
-            return None
-
-        paths = list(self._embed_cache.keys())
-        vecs  = torch.stack(list(self._embed_cache.values()))   # [N, D]
-
-        min_ts = (where_filter or {}).get("timestamp", {}).get("$gte", None)
-        src_id = (where_filter or {}).get("source_id", None)
-
-        indices = _cuda_topk_cosine(query_vec, vecs, top_k * 3)  # over-fetch
-
-        matched = []
-        for idx in indices.tolist():
-            path = paths[idx]
-            res  = self._get_collection(collection_name).get(
-                where={"frame_path": path}, include=["metadatas"]
-            )
-            if res["metadatas"]:
-                meta = res["metadatas"][0]
-                if min_ts is not None and meta["timestamp"] < min_ts:
-                    continue
-                if src_id is not None and meta.get("source_id") != src_id:
-                    continue
-                if not os.path.exists(meta["frame_path"]):
-                    continue
-                matched.append(meta)
-            if len(matched) == top_k:
-                break
-
-        if not matched:
-            return None
-
-        return {
-            "metadatas": [matched],
-            "ids":       [[m["frame_path"] for m in matched]],
-            "distances": [[0.0] * len(matched)]
-        }
-
-    # ──────────────────────────────────────────────────────────────────────────
-    # Background AI worker  (teammate's pattern, adapted for CUDA path)
-    # ──────────────────────────────────────────────────────────────────────────
-
-    def _ai_worker(self):
-        """
-        Drains the ai_queue in batches, encoding with CLIP on CUDA.
-        Keeps preprocessing out of the main video-read loop so ingest
-        doesn't block waiting for GPU.
-        """
-        batches: dict[str, dict] = {}   # keyed by collection_name
-
-        while True:
-            try:
-                task = self.ai_queue.get()
-                if task is None:
-                    break
-
-                # FLUSH signal sent after video read loop finishes
-                if isinstance(task, tuple) and task[0] == "FLUSH":
-                    _, source_id, collection_name, _ = task
-                    if collection_name in batches and batches[collection_name]["tensors"]:
-                        b = batches[collection_name]
-                        print(f"✅ [AI Worker] Flushing {len(b['tensors'])} frames "
-                              f"for {source_id} → [{collection_name}]")
-                        self._store_batch_hardware(
-                            b["tensors"], b["metadatas"], b["ids"], collection_name
-                        )
-                        batches[collection_name] = {"tensors": [], "metadatas": [], "ids": []}
-                    continue
-
-                # Normal frame task
-                hw_tensor, metadata, source_id, timestamp, collection_name = task
-
-                if collection_name not in batches:
-                    batches[collection_name] = {"tensors": [], "metadatas": [], "ids": []}
-
-                b = batches[collection_name]
-                b["tensors"].append(hw_tensor)
-                b["metadatas"].append(metadata)
-                b["ids"].append(f"{source_id}_{timestamp:.2f}")
-
-                if len(b["tensors"]) >= 32:
-                    self._store_batch_hardware(
-                        b["tensors"], b["metadatas"], b["ids"], collection_name
-                    )
-                    batches[collection_name] = {"tensors": [], "metadatas": [], "ids": []}
-
-            except Exception as e:
-                print(f"❌ [AI Worker] ERROR: {e}")
-            finally:
-                self.ai_queue.task_done()
-
-    # ──────────────────────────────────────────────────────────────────────────
-    # Kernel 1 — Offline video ingest
-    # ──────────────────────────────────────────────────────────────────────────
 
     def ingest_video(self, video_path: str, source_id: str,
                      collection_name: str = None,
                      fps_to_extract: int = 1,
-                     batch_size: int = 64,
+                     batch_size: int = 32,
                      on_frame=None):
         """
-        Reads a recorded video file, preprocesses frames on CUDA, queues for
-        background CLIP encoding.
+        Reads a recorded video file, preprocesses frames on the active device,
+        and encodes them in batches synchronously.
 
         on_frame: optional callback(bgr_frame) — called on every decoded frame
                   so the backend can stream latest frames to the UI via asyncio.
@@ -407,12 +217,15 @@ class OfflineVideoPipeline:
 
         print(f"📼 Ingesting '{video_path}' → [{collection_name}] on [{self.device.upper()}]")
 
+        tensor_list = []
+        metadata_list = []
+        id_list = []
+
         while cap.isOpened():
             ret, frame = cap.read()
             if not ret:
                 break
 
-            # on_frame callback for the backend's live preview streaming
             if on_frame:
                 on_frame(frame)
 
@@ -425,170 +238,32 @@ class OfflineVideoPipeline:
                     "frame_path": frame_path
                 }
 
-                # Synchronous JPEG save (teammate requirement — ensures file exists
-                # on disk before VLM tries to open it)
+                # Save frame image asynchronously to disk
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 pil_img = Image.fromarray(rgb)
                 self.io_pool.submit(pil_img.save, frame_path)
-                #pil_img.save(frame_path)
 
-                # CUDA preprocessing on main thread, encoding deferred to worker
-                try:
-                    hw_tensor = self._convert_cv2_to_hardware_tensor(frame)
-                    self.ai_queue.put_nowait(
-                        (hw_tensor, metadata, source_id, timestamp, collection_name)
-                    )
-                except queue.Full:
-                    print(f"⚠️ AI queue full — skipping frame t={timestamp:.1f}")
+                # Preprocess frame tensor
+                hw_tensor = self._convert_cv2_to_hardware_tensor(frame)
+                tensor_list.append(hw_tensor)
+                metadata_list.append(metadata)
+                id_list.append(f"{source_id}_{timestamp:.2f}")
+
+                if len(tensor_list) >= batch_size:
+                    self._store_batch_hardware(tensor_list, metadata_list, id_list, collection_name)
+                    tensor_list = []
+                    metadata_list = []
+                    id_list = []
 
             count += 1
 
         cap.release()
 
-        print(f"🏁 Read complete for {source_id}. Waiting for AI worker...")
-        self.ai_queue.put(("FLUSH", source_id, collection_name, True))
-        self.ai_queue.join()
+        # Flush any remaining frames
+        if tensor_list:
+            self._store_batch_hardware(tensor_list, metadata_list, id_list, collection_name)
+
         print(f"✅ Ingest done for {source_id}.")
-
-    # ──────────────────────────────────────────────────────────────────────────
-    # Kernel 2 — Standard live ingestion (1 fps, no motion gate)
-    # ──────────────────────────────────────────────────────────────────────────
-
-    def start_live_ingestion(self, stream_input_url: str,
-                             source_id: str = "live_cam01",
-                             max_test_iterations: int | None = None):
-        """
-        Embeds one frame per second unconditionally.
-        Routes to COLLECTION_LIVE to match teammate's backend routing.
-        """
-        stream_url = stream_input_url
-        if "youtube.com" in stream_input_url or "youtu.be" in stream_input_url:
-            print("Extracting HLS stream from YouTube...")
-            stream_url = self._resolve_youtube_url(stream_input_url)
-            if stream_url is None:
-                return
-
-        collection_name = self.COLLECTION_LIVE
-        print(f"📡 Live ingestion → {source_id} → [{collection_name}]")
-        os.makedirs(f"./data/frames/{source_id}", exist_ok=True)
-
-        cap               = cv2.VideoCapture(stream_url)
-        last_extract_time = 0.0
-        extracted_count   = 0
-
-        try:
-            while True:
-                ret, frame = cap.read()
-                if not ret:
-                    if max_test_iterations:
-                        break
-                    print("Stream stuttered. Reconnecting in 5s...")
-                    time.sleep(5)
-                    cap = cv2.VideoCapture(stream_url)
-                    continue
-
-                curr_t = time.time()
-                if curr_t - last_extract_time < 1.0:
-                    continue
-
-                hw_tensor  = self._convert_cv2_to_hardware_tensor(frame)
-                frame_path = f"./data/frames/{source_id}/live_{int(curr_t)}.jpg"
-                self.io_pool.submit(
-                    Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)).save,
-                    frame_path
-                )
-                self._store_batch_hardware(
-                    [hw_tensor],
-                    [{"source_id": source_id, "timestamp": curr_t, "frame_path": frame_path}],
-                    [f"{source_id}_{int(curr_t)}"],
-                    collection_name
-                )
-
-                print(f"[{source_id}] Embedded @ {time.strftime('%H:%M:%S')}")
-                last_extract_time = curr_t
-                extracted_count  += 1
-
-                if max_test_iterations and extracted_count >= max_test_iterations:
-                    break
-        finally:
-            cap.release()
-
-    # ──────────────────────────────────────────────────────────────────────────
-    # Kernel 3 — Smart live ingestion v2 (motion-gated, C++ entropy gate)
-    # ──────────────────────────────────────────────────────────────────────────
-
-    def start_smart_live_ingestion_v2(self, stream_input_url: str,
-                                      source_id: str = "live_cam_v2",
-                                      noise_floor: float = 0.03,
-                                      physical_shift_threshold: float = 0.015,
-                                      max_test_iterations: int | None = None):
-        """Motion-gated live ingestion using C++ CUDA entropy kernel."""
-        print(f"\n🧬 [SMART V2] Entropy Gate — {source_id}")
-
-        stream_url = stream_input_url
-        if "youtube.com" in stream_input_url or "youtu.be" in stream_input_url:
-            stream_url = self._resolve_youtube_url(stream_input_url)
-            if stream_url is None:
-                return
-
-        collection_name = self.COLLECTION_LIVE
-        os.makedirs(f"./data/frames/{source_id}", exist_ok=True)
-        cap = cv2.VideoCapture(stream_url)
-
-        last_extract_time                   = 0.0
-        last_hw_tensor: torch.Tensor | None = None
-        extracted_count                     = 0
-
-        try:
-            while True:
-                ret, frame = cap.read()
-                if not ret:
-                    if max_test_iterations:
-                        break
-                    time.sleep(2)
-                    cap = cv2.VideoCapture(stream_url)
-                    continue
-
-                curr_t = time.time()
-                if curr_t - last_extract_time < 1.0:
-                    continue
-
-                hw_tensor = self._convert_cv2_to_hardware_tensor(frame)
-
-                if last_hw_tensor is not None:
-                    motion_detected, ratio = _compute_entropy_hardware(
-                        last_hw_tensor, hw_tensor,
-                        noise_floor, physical_shift_threshold
-                    )
-                    if not motion_detected:
-                        print(f"[{source_id}] Static ({ratio*100:.2f}% Δ) → gate drop.")
-                        last_hw_tensor    = hw_tensor
-                        last_extract_time = curr_t
-                        continue
-                    print(f"🚨 [{source_id}] Motion {ratio*100:.2f}% Δ → embedding @ {time.strftime('%H:%M:%S')}")
-                else:
-                    print(f"[{source_id}] Baseline → embedding @ {time.strftime('%H:%M:%S')}")
-
-                frame_path = f"./data/frames/{source_id}/v2_{int(curr_t)}.jpg"
-                self.io_pool.submit(
-                    Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)).save,
-                    frame_path
-                )
-                self._store_batch_hardware(
-                    [hw_tensor],
-                    [{"source_id": source_id, "timestamp": curr_t, "frame_path": frame_path}],
-                    [f"{source_id}_{int(curr_t)}"],
-                    collection_name
-                )
-
-                last_hw_tensor    = hw_tensor
-                last_extract_time = curr_t
-                extracted_count  += 1
-
-                if max_test_iterations and extracted_count >= max_test_iterations:
-                    break
-        finally:
-            cap.release()
 
     # ──────────────────────────────────────────────────────────────────────────
     # Query — text → CCTV search
@@ -604,7 +279,6 @@ class OfflineVideoPipeline:
         Text query → top-k retrieval → VLM verification.
         Signature matches teammate's backend contract exactly.
         Routes to live vs uploaded collection based on is_stream flag.
-        CUDA cosine search used when VRAM cache is warm.
         """
         if collection_name is None:
             collection_name = self.COLLECTION_LIVE if is_stream else self.COLLECTION_UPLOADED
@@ -620,17 +294,12 @@ class OfflineVideoPipeline:
         if not where_filter:
             where_filter = None
 
-        # Try CUDA in-VRAM search first
-        results = self._cuda_query(query_vec, top_k, where_filter, collection_name)
-
-        # Cold cache — fall back to ChromaDB
-        if results is None:
-            col     = self._get_collection(collection_name)
-            results = col.query(
-                query_embeddings=[query_vec.cpu().tolist()],
-                n_results=top_k,
-                where=where_filter
-            )
+        col = self._get_collection(collection_name)
+        results = col.query(
+            query_embeddings=[query_vec.cpu().tolist()],
+            n_results=top_k,
+            where=where_filter
+        )
 
         if not results['ids'] or not results['ids'][0]:
             return {"status": "error", "message": "No matches found."}
@@ -699,16 +368,11 @@ class OfflineVideoPipeline:
 
                 print(f"[TRACING] Searching [{cname}] ({col.count()} frames)...")
 
-                # Try VRAM-resident cosine search first
-                results = self._cuda_query(query_vec, top_k, None, cname)
-
-                # Cold VRAM cache — fall back to ChromaDB
-                if results is None:
-                    results = col.query(
-                        query_embeddings=[query_vec.cpu().tolist()],
-                        n_results=min(top_k, col.count()),
-                        include=["metadatas", "distances"]
-                    )
+                results = col.query(
+                    query_embeddings=[query_vec.cpu().tolist()],
+                    n_results=min(top_k, col.count()),
+                    include=["metadatas", "distances"]
+                )
 
                 if results and results["ids"] and results["ids"][0]:
                     batch_meta = results["metadatas"][0]
@@ -833,7 +497,7 @@ class OfflineVideoPipeline:
 
 
     # ──────────────────────────────────────────────────────────────────────────
-    # Reverse image search — fully CUDA-accelerated with multimodal fusion kernel
+    # Reverse image search — hardware-accelerated with multimodal fusion
     # ──────────────────────────────────────────────────────────────────────────
 
     def find_suspect_by_image(self, suspect_image_path: str,
@@ -844,12 +508,12 @@ class OfflineVideoPipeline:
         Multi-modal reverse image search.
         Signature matches teammate's API contract (text_query param for context fusion).
 
-        CUDA pipeline:
-          1. cv2.imread → BGR tensor on device   (IO + CUDA preprocessing kernel)
-          2. CLIP image encode                   (CUDA)
-          3. Optional text encode                (CUDA)
-          4. _cuda_fuse_modalities               (weighted mean on VRAM, re-normalise)
-          5. _cuda_query / ChromaDB fallback     (CUDA cosine search)
+        Pipeline:
+          1. cv2.imread → BGR tensor on device   (IO + device preprocessing)
+          2. CLIP image encode                   (device)
+          3. Optional text encode                (device)
+          4. _fuse_modalities                    (weighted mean on device, re-normalise)
+          5. ChromaDB query                      (cached cosine search)
           6. VLM verification with resized imgs  (IO — cached)
         """
         print(f"\n[REVERSE IMAGE SEARCH] Visual query: '{suspect_image_path}' "
@@ -863,16 +527,16 @@ class OfflineVideoPipeline:
                 "message": f"Could not read suspect image: '{suspect_image_path}'"
             }
 
-        # ── CUDA: image preprocessing + encoding ────────────────────────────
-        hw_tensor   = self._convert_cv2_to_hardware_tensor(bgr_frame)   # CUDA
-        img_vec     = self._encode_image_tensor(hw_tensor)               # CUDA [D]
+        # ── Device: image preprocessing + encoding ────────────────────────────
+        hw_tensor   = self._convert_cv2_to_hardware_tensor(bgr_frame)   # device
+        img_vec     = self._encode_image_tensor(hw_tensor)               # device [D]
 
-        # ── CUDA: optional text encode ───────────────────────────────────────
-        text_vec = self._encode_text(text_query) if text_query else None  # CUDA [D]
+        # ── Device: optional text encode ───────────────────────────────────────
+        text_vec = self._encode_text(text_query) if text_query else None  # device [D]
 
-        # ── CUDA: multimodal fusion kernel ────────────────────────────────────
+        # ── Device: multimodal fusion ────────────────────────────────────
         # Equal weight (0.5/0.5) matches teammate's arithmetic mean fusion.
-        query_vec = _cuda_fuse_modalities(img_vec, text_vec, image_weight=0.5)
+        query_vec = _fuse_modalities(img_vec, text_vec, image_weight=0.5)
 
         # ── Search ────────────────────────────────────────────────────────────
         where_filter = {"timestamp": {"$gte": min_timestamp}} if min_timestamp else None
@@ -881,10 +545,6 @@ class OfflineVideoPipeline:
         results = None
         for cname in [self.COLLECTION_UPLOADED, self.COLLECTION_LIVE,
                       self.default_collection_name]:
-            results = self._cuda_query(query_vec, top_k, where_filter, cname)
-            if results is not None:
-                break
-            # Cold cache — ChromaDB fallback
             col = self._get_collection(cname)
             r   = col.query(
                 query_embeddings=[query_vec.cpu().tolist()],

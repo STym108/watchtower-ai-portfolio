@@ -28,5 +28,4 @@ Located in the `/model` directory, this is a highly optimized Two-Stage Retrieva
 └── /model             # Core ML Pipeline & VectorDB
     ├── setup_env.py          # Initializes DB and folders
     ├── pipelineY.py          # The core offline ML pipeline
-    ├── pipeline_webrtc.py    # [WIP] Live camera feed pipeline
     └── /data                 # Shared storage (DB, Frames, Videos)
