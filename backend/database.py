@@ -14,3 +14,13 @@ engine = create_engine(
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
+
+
+def get_db():
+    """Dependency generator that yields a database session and closes it when the request is done."""
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
