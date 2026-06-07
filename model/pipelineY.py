@@ -1,180 +1,120 @@
 """
-pipeline.py — WatchTower.ai Unified ML Engine
-==============================================
-Merges:
-  Hardware acceleration (device-side preprocessing)
-  find_suspect_by_image now fully hardware-accelerated with multimodal vector fusion
-  All IO-bound VLM calls cached and images resized before send (quota saving)
+pipeline.py — WatchTower.ai Unified ML Orchestration Engine
+==========================================================
+This file acts as the primary orchestrator for the WatchTower.ai machine learning engine.
+It preserves the public API contract (the OfflineVideoPipeline class and all public method signatures)
+to ensure compatibility with other backend layers.
+
+Instead of containing all ML code in a single file, it coordinates:
+- Embedder (model/embedder.py): Handles hardware-accelerated CLIP embedding generation.
+- VectorDBManager (model/vectordb.py): Handles ChromaDB persistence, storage, and queries.
+- VLMManager (model/vlm.py): Handles Gemini API validation, cache control, and frame downscaling.
+
+Coordination:
+- Used by: backend/main.py (for processing camera streams, user queries, timeline generation).
 """
 
 import os
-import sys
-import time
 import shutil
 import concurrent.futures
-import hashlib
-
 import cv2
-import torch
-import torchvision.transforms.v2 as T
-import chromadb
-import open_clip
 from PIL import Image
-from google import genai
+
+# Import the decoupled modules
+from model.embedder import Embedder, fuse_modalities
+from model.vectordb import VectorDBManager
+from model.vlm import VLMManager
 
 # Allow OpenCV/FFmpeg to connect to IP cameras with self-signed HTTPS certs
 os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "tls_verify;0"
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# 1.  Vector Modality Fusion (Pure PyTorch Vectorized)
-# ──────────────────────────────────────────────────────────────────────────────
-def _fuse_modalities(image_vec: "torch.Tensor",
-                     text_vec: "torch.Tensor | None",
-                     image_weight: float = 0.5) -> "torch.Tensor":
-    """
-    Weighted multimodal fusion + L2 renormalization using standard PyTorch.
-    Returns image_vec unchanged if text_vec is None.
-    """
-    if text_vec is None:
-        return image_vec
-    with torch.no_grad():
-        fused  = image_weight * image_vec + (1.0 - image_weight) * text_vec
-        fused /= fused.norm(dim=-1, keepdim=True)
-    return fused
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# 4.  Main Pipeline
-# ──────────────────────────────────────────────────────────────────────────────
 class OfflineVideoPipeline:
+    """
+    Unified Orchestrator implementing the public API of the ML engine.
+    This class matches the exact signatures and attributes expected by the backend.
+    """
 
-    # ── Collection routing (matches teammate's backend contract) ──────────────
+    # Router collections for video sources
     COLLECTION_LIVE     = "live_cctv_stream"
     COLLECTION_UPLOADED = "uploaded_vault"
 
-    def __init__(self, api_key: str,
-                 collection_name: str = "cctv_main_stream"):
+    def __init__(self, api_key: str, collection_name: str = "cctv_main_stream"):
+        """
+        Initializes the sub-modules: Embedder, VectorDBManager, VLMManager,
+        and setting up the async I/O worker thread pool.
+        """
+        # 1. Initialize core feature extraction (CLIP and PyTorch hardware selection)
+        self.embedder = Embedder()
+        self.device = self.embedder.device  # Expose property for status checking/diagnostics
 
-        # ── Hardware dispatch ────────────────────────────────────────────────
-        if torch.cuda.is_available():
-            self.device = "cuda"
-        elif torch.backends.mps.is_available():
-            self.device = "mps"
-        else:
-            self.device = "cpu"
-
-        print(f"\n🧠 Hardware locked → [{self.device.upper()}]")
-        if self.device == "cuda":
-            props = torch.cuda.get_device_properties(0)
-            print(f"   GPU : {props.name}  |  VRAM: {props.total_memory // 1024**2} MB")
-
-        # ── CLIP ─────────────────────────────────────────────────────────────
-        self.model, _, _ = open_clip.create_model_and_transforms(
-            'ViT-B-32', pretrained='openai'     
+        # 2. Initialize persistent Vector Database (ChromaDB client and collection storage)
+        self.db = VectorDBManager(
+            default_collection=collection_name,
+            additional_collections=[self.COLLECTION_LIVE, self.COLLECTION_UPLOADED]
         )
-        self.model = self.model.to(self.device).eval()
-        self.tokenizer = open_clip.get_tokenizer('ViT-B-32')
-        # ── Device-side preprocessing ────────────────────────────────────────────
-        self.device_preprocess = T.Compose([
-            T.Resize(224, antialias=True),
-            T.CenterCrop(224),
-            T.Normalize(
-                mean=(0.48145466, 0.4578275,  0.40821073),
-                std= (0.26862954, 0.26130258, 0.27577711)
-            )
-        ])
-
-        # ── Vector DB ────────────────────────────────────────────────────────
-        os.makedirs("./data/vector_db", exist_ok=True)
-        self.chroma_client = chromadb.PersistentClient(path="./data/vector_db")
-
-        # Pre-create all known collections (cosine space for CLIP vectors)
-        for cname in [collection_name, self.COLLECTION_LIVE, self.COLLECTION_UPLOADED]:
-            self.chroma_client.get_or_create_collection(
-                name=cname, metadata={"hnsw:space": "cosine"}
-            )
-
-        # Default collection (for track_timeline which has no is_stream context)
         self.default_collection_name = collection_name
 
-        # ── VLM ──────────────────────────────────────────────────────────────
-        self.vlm_client     = genai.Client(api_key=api_key)
-        self.vlm_model_name = "gemini-2.5-flash"
-        self._vlm_cache: dict[str, str] = {}
+        # 3. Initialize Vision-Language Model (Gemini API with MD5 caching)
+        self.vlm = VLMManager(api_key=api_key)
 
-        # ── Async I/O pool ───────────────────────────────────────────────────
+        # 4. Async I/O thread pool (saves JPEG frames to disk in the background to avoid write lag)
         self.io_pool = concurrent.futures.ThreadPoolExecutor(max_workers=10)
 
-
-
     # ──────────────────────────────────────────────────────────────────────────
-    # Internal helpers
+    # Backward-Compatible Private Helper Methods
     # ──────────────────────────────────────────────────────────────────────────
+    # These helpers redirect to the specific modules so that any internal
+    # references in legacy backend imports or code remain intact.
 
-    def _convert_cv2_to_hardware_tensor(self, frame_bgr) -> torch.Tensor:
-        """BGR numpy frame → normalised CHW float tensor on device."""
-        hw = torch.from_numpy(frame_bgr).permute(2, 0, 1).float().to(self.device)
-        hw = hw[[2, 1, 0], ...] / 255.0
-        return self.device_preprocess(hw)
+    def _convert_cv2_to_hardware_tensor(self, frame_bgr):
+        """Delegates to Embedder module to convert numpy frame to preprocessed device tensor."""
+        return self.embedder.convert_frame_to_tensor(frame_bgr)
 
-    def _encode_image_tensor(self, tensor: torch.Tensor) -> torch.Tensor:
-        """Single preprocessed CHW tensor → normalised [D] vec on device."""
-        with torch.no_grad():
-            feat = self.model.encode_image(tensor.unsqueeze(0))
-            feat /= feat.norm(dim=-1, keepdim=True)
-        return feat.squeeze(0)
+    def _encode_image_tensor(self, tensor) -> "torch.Tensor":
+        """Delegates to Embedder module to encode preprocessed image tensor to a CLIP embedding."""
+        return self.embedder.encode_image_tensor(tensor)
 
-    def _encode_text(self, text: str) -> torch.Tensor:
-        """Text string → normalised [D] vec on device."""
-        tokens = self.tokenizer([text]).to(self.device)
-        with torch.no_grad():
-            feat = self.model.encode_text(tokens)
-            feat /= feat.norm(dim=-1, keepdim=True)
-        return feat.squeeze(0)
+    def _encode_text(self, text: str) -> "torch.Tensor":
+        """Delegates to Embedder module to encode a search query text to a CLIP embedding."""
+        return self.embedder.encode_text(text)
 
-    def _store_batch_hardware(self, tensor_list: list,
-                              metadatas: list, ids: list,
-                              collection_name: str):
+    def _store_batch_hardware(self, tensor_list: list, metadatas: list, ids: list, collection_name: str):
         """
-        Stacks device tensors, CLIP-encodes, and upserts to ChromaDB.
+        Extracts features from a list of frames using Embedder batch-encoding,
+        and saves the resulting vectors to ChromaDB using the VectorDBManager.
         """
         if not tensor_list:
             return
-        tensors = torch.stack(tensor_list).to(self.device)
-        with torch.no_grad():
-            features = self.model.encode_image(tensors)
-            features /= features.norm(dim=-1, keepdim=True)
+        
+        # 1. Batch encode image tensors on the device (MPS/CUDA/CPU)
+        features_tensor = self.embedder.encode_image_batch(tensor_list)
+        embeddings = features_tensor.cpu().tolist()
 
-        col = self.chroma_client.get_or_create_collection(
-            name=collection_name, metadata={"hnsw:space": "cosine"}
+        # 2. Store embeddings, metadata, and IDs in the Vector DB
+        self.db.add_embeddings(
+            collection_name=collection_name,
+            embeddings=embeddings,
+            metadatas=metadatas,
+            ids=ids
         )
-        col.add(embeddings=features.cpu().tolist(), metadatas=metadatas, ids=ids)
-        print(f"💾 Stored {len(tensor_list)} frames → [{collection_name}] | total: {col.count()}")
 
     def _vlm_query(self, cache_key: str, contents: list) -> str:
-        """VLM call with MD5-keyed cache to save quota."""
-        h = hashlib.md5(cache_key.encode()).hexdigest()
-        if h in self._vlm_cache:
-            print("[VLM] Cache hit — skipping API call.")
-            return self._vlm_cache[h]
-        resp = self.vlm_client.models.generate_content(
-            model=self.vlm_model_name, contents=contents
-        )
-        self._vlm_cache[h] = resp.text
-        return resp.text
+        """Delegates to VLMManager to query Gemini with caching."""
+        return self.vlm.query(cache_key, contents)
 
-    def _resize_for_vlm(self, pil_img: Image.Image,
-                         max_side: int = 512) -> Image.Image:
-        """Downscale before VLM send — reduces token cost."""
-        pil_img.thumbnail((max_side, max_side), Image.LANCZOS)
-        return pil_img
+    def _resize_for_vlm(self, pil_img: Image.Image, max_side: int = 512) -> Image.Image:
+        """Delegates to VLMManager to downsample image for cost saving."""
+        return self.vlm.resize_for_vlm(pil_img, max_side)
 
     def _get_collection(self, collection_name: str):
-        return self.chroma_client.get_or_create_collection(
-            name=collection_name, metadata={"hnsw:space": "cosine"}
-        )
+        """Delegates to VectorDBManager to get/create a collection."""
+        return self.db.get_collection(collection_name)
 
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # Core Public API Methods
+    # ──────────────────────────────────────────────────────────────────────────
 
     def ingest_video(self, video_path: str, source_id: str,
                      collection_name: str = None,
@@ -182,40 +122,38 @@ class OfflineVideoPipeline:
                      batch_size: int = 32,
                      on_frame=None):
         """
-        Reads a recorded video file, preprocesses frames on the active device,
-        and encodes them in batches synchronously.
-
-        on_frame: optional callback(bgr_frame) — called on every decoded frame
-                  so the backend can stream latest frames to the UI via asyncio.
-        collection_name: defaults to COLLECTION_UPLOADED to match teammate's routing.
+        Processes a video file, extracts frames, creates embeddings, and saves them to the DB.
+        
+        How it coordinates:
+          - Decodes video frames via OpenCV (`cv2`).
+          - Delegates frame image saving to disk via `self.io_pool` (async).
+          - Delegates frame tensor preprocessing and embedding extraction to `self.embedder`.
+          - Delegates vector storage to `self.db` (VectorDBManager).
         """
         if collection_name is None:
             collection_name = self.COLLECTION_UPLOADED
 
-        # Fresh-start cleanup (teammate requirement)
+        # 1. Clear out previously saved frames to keep disk tidy
         frames_dir = f"./data/frames/{source_id}"
         if os.path.exists(frames_dir):
-            print(f"🧹 Cleaning old frames: {frames_dir}")
+            print(f"🧹 [Ingestion] Cleaning old frames: {frames_dir}")
             shutil.rmtree(frames_dir)
         os.makedirs(frames_dir, exist_ok=True)
 
-        try:
-            col = self._get_collection(collection_name)
-            col.delete(where={"source_id": source_id})
-            print(f"🧹 Purged old VectorDB entries for {source_id} in [{collection_name}]")
-        except Exception:
-            pass
+        # 2. Purge old vector database entries for this specific video source
+        self.db.delete_source_data(collection_name, source_id)
 
+        # 3. Read video file using OpenCV
         cap = cv2.VideoCapture(video_path)
         if not cap.isOpened():
-            print(f"❌ Could not open video: {video_path}")
+            print(f"❌ [Ingestion] Could not open video: {video_path}")
             return
 
         fps            = round(cap.get(cv2.CAP_PROP_FPS) or 25.0)
         frame_interval = max(1, int(fps / fps_to_extract))
         count          = 0
 
-        print(f"📼 Ingesting '{video_path}' → [{collection_name}] on [{self.device.upper()}]")
+        print(f"📼 [Ingestion] Starting ingestion for '{video_path}' → [{collection_name}]")
 
         tensor_list = []
         metadata_list = []
@@ -226,9 +164,11 @@ class OfflineVideoPipeline:
             if not ret:
                 break
 
+            # Trigger optional callback for live stream UI updates
             if on_frame:
                 on_frame(frame)
 
+            # Sample frames based on target extraction FPS
             if count % frame_interval == 0:
                 timestamp  = count / fps
                 frame_path = f"./data/frames/{source_id}/t_{timestamp:.1f}.jpg"
@@ -238,17 +178,19 @@ class OfflineVideoPipeline:
                     "frame_path": frame_path
                 }
 
-                # Save frame image asynchronously to disk
+                # Save frame as JPEG in background thread pool to prevent blocking frame extraction
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 pil_img = Image.fromarray(rgb)
                 self.io_pool.submit(pil_img.save, frame_path)
 
-                # Preprocess frame tensor
-                hw_tensor = self._convert_cv2_to_hardware_tensor(frame)
+                # Preprocess OpenCV frame image on device (MPS/CUDA/CPU)
+                hw_tensor = self.embedder.convert_frame_to_tensor(frame)
+                
                 tensor_list.append(hw_tensor)
                 metadata_list.append(metadata)
                 id_list.append(f"{source_id}_{timestamp:.2f}")
 
+                # If batch size threshold reached, encode and write to Vector DB
                 if len(tensor_list) >= batch_size:
                     self._store_batch_hardware(tensor_list, metadata_list, id_list, collection_name)
                     tensor_list = []
@@ -259,15 +201,12 @@ class OfflineVideoPipeline:
 
         cap.release()
 
-        # Flush any remaining frames
+        # Flush any remaining frames left in the buffer
         if tensor_list:
             self._store_batch_hardware(tensor_list, metadata_list, id_list, collection_name)
 
-        print(f"✅ Ingest done for {source_id}.")
+        print(f"✅ [Ingestion] Completed successfully for video source '{source_id}'.")
 
-    # ──────────────────────────────────────────────────────────────────────────
-    # Query — text → CCTV search
-    # ──────────────────────────────────────────────────────────────────────────
 
     def query(self, text_query: str,
               top_k: int = 5,
@@ -276,16 +215,21 @@ class OfflineVideoPipeline:
               is_stream: bool = False,
               collection_name: str | None = None) -> dict:
         """
-        Text query → top-k retrieval → VLM verification.
-        Signature matches teammate's backend contract exactly.
-        Routes to live vs uploaded collection based on is_stream flag.
+        Performs a semantic search query against the ingested surveillance footage.
+        
+        Workflow:
+          1. Encodes text query via `Embedder`.
+          2. Queries vector database collections using `VectorDBManager`.
+          3. Checks if matching frames still exist on disk.
+          4. Submits matches to the Gemini model via `VLMManager` for validation and synthesis.
         """
         if collection_name is None:
             collection_name = self.COLLECTION_LIVE if is_stream else self.COLLECTION_UPLOADED
 
-        query_vec = self._encode_text(text_query)   # on device
+        # 1. Generate text query embedding vector
+        query_vec = self.embedder.encode_text(text_query)
 
-        # Build where filter (teammate's source_id + timestamp filters)
+        # 2. Build metadata filter matching teammate's database schema
         where_filter: dict = {}
         if min_timestamp is not None:
             where_filter["timestamp"] = {"$gte": min_timestamp}
@@ -294,35 +238,41 @@ class OfflineVideoPipeline:
         if not where_filter:
             where_filter = None
 
-        col = self._get_collection(collection_name)
-        results = col.query(
-            query_embeddings=[query_vec.cpu().tolist()],
-            n_results=top_k,
-            where=where_filter
+        # 3. Query Vector Database
+        results = self.db.query(
+            collection_name=collection_name,
+            query_embedding=query_vec.cpu().tolist(),
+            top_k=top_k,
+            where_filter=where_filter
         )
 
         if not results['ids'] or not results['ids'][0]:
             return {"status": "error", "message": "No matches found."}
 
         raw_frames   = results['metadatas'][0]
-        # File-existence guard (teammate requirement)
+        # Verify that the frame images are still present on disk
         valid_frames = [m for m in raw_frames if os.path.exists(m['frame_path'])]
 
         if not valid_frames:
             return {"status": "error", "message": "No valid image frames found on disk."}
 
+        # 4. Synthesize contents for Gemini API (instructions + images)
         vlm_content = [
             f"Query: '{text_query}'. Analyze these CCTV frames and confirm if the target is present. "
             "Provide a professional 2-line summary. Mention the primary frame of detection clearly."
         ]
         for m in valid_frames:
-            vlm_content.append(self._resize_for_vlm(Image.open(m['frame_path'])))
+            vlm_content.append(self.vlm.resize_for_vlm(Image.open(m['frame_path'])))
 
         timestamps = [m['timestamp'] for m in valid_frames]
+        
+        # 5. Get VLM verification response
+        response_text = self.vlm.query(text_query, vlm_content)
+
         return {
             "status":      "success",
             "query":       text_query,
-            "response":    self._vlm_query(text_query, vlm_content),
+            "response":    response_text,
             "source_id":   valid_frames[0]['source_id'],
             "clip_start":  max(0, min(timestamps) - 2.0),
             "clip_end":    max(timestamps) + 2.0,
@@ -330,68 +280,60 @@ class OfflineVideoPipeline:
             "all_matches": valid_frames
         }
 
-    # ──────────────────────────────────────────────────────────────────────────
-    # Timeline tracker — cross-camera detective mode
-    # ──────────────────────────────────────────────────────────────────────────
 
     def track_timeline(self, text_query: str,
-                       top_k: int = 20,
-                       max_distance: float = 2.0,
-                       skip_vlm: bool = False) -> dict:
+                        top_k: int = 20,
+                        max_distance: float = 2.0,
+                        skip_vlm: bool = False) -> dict:
         """
-        Maps target movement across all cameras.
-        Searches UPLOADED, LIVE, and default collections so footage
-        ingested via any path is always found.
-        max_distance=2.0 matches teammate's high-recall setting (VLM does final verify).
-        skip_vlm=True for fast dev iteration without burning quota.
+        Traces a suspect or object's path across all cameras (cross-camera timeline tracking).
+        
+        Workflow:
+          1. Encodes search query text to a vector using `Embedder`.
+          2. Iterates over all known vector collections (live, uploaded, default) to find matches.
+          3. Rejects entries exceeding `max_distance` (where smaller distance = higher similarity).
+          4. Deduplicates matching frames and groups them into chronological time blocks.
+          5. Prompts Gemini VLM to synthesize a unified report outlining the suspect's movements.
         """
-        print(f"\n[TRACING] Computing trajectory for '{text_query}'")
+        print(f"\n🕵️‍♂️ [Timeline] Tracing trajectory for query: '{text_query}'")
 
-        query_vec = self._encode_text(text_query)
+        # 1. Encode text query
+        query_vec = self.embedder.encode_text(text_query)
 
-        # ── Search ALL populated collections, not just the default empty one ──
+        # Search all active collections to find footage regardless of how it was ingested
         collections_to_search = list(dict.fromkeys([
-            self.COLLECTION_UPLOADED,       # "uploaded_vault"   ← videos land here
-            self.COLLECTION_LIVE,           # "live_cctv_stream" ← streams land here
-            self.default_collection_name,   # "cctv_main_stream" ← legacy / manual
+            self.COLLECTION_UPLOADED,
+            self.COLLECTION_LIVE,
+            self.default_collection_name,
         ]))
 
         all_metadatas: list[dict] = []
         all_distances: list[float] = []
 
+        # 2. Gather candidates from all database collections
         for cname in collections_to_search:
             try:
-                col = self._get_collection(cname)
-                if col.count() == 0:
-                    print(f"[TRACING] Skipping empty collection: [{cname}]")
-                    continue
-
-                print(f"[TRACING] Searching [{cname}] ({col.count()} frames)...")
-
-                results = col.query(
-                    query_embeddings=[query_vec.cpu().tolist()],
-                    n_results=min(top_k, col.count()),
-                    include=["metadatas", "distances"]
+                results = self.db.query(
+                    collection_name=cname,
+                    query_embedding=query_vec.cpu().tolist(),
+                    top_k=top_k
                 )
 
                 if results and results["ids"] and results["ids"][0]:
                     batch_meta = results["metadatas"][0]
-                    batch_dist = results.get(
-                        "distances",
-                        [[0.0] * len(batch_meta)]
-                    )[0]
+                    batch_dist = results.get("distances", [[0.0] * len(batch_meta)])[0]
                     all_metadatas.extend(batch_meta)
                     all_distances.extend(batch_dist)
-                    print(f"[TRACING] Found {len(batch_meta)} candidates in [{cname}]")
+                    print(f"🕵️‍♂️ [Timeline] Found {len(batch_meta)} matches in [{cname}]")
 
             except Exception as e:
-                print(f"[TRACING] Skipping collection '{cname}': {e}")
+                print(f"⚠️ [Timeline] Error querying collection '{cname}': {e}")
                 continue
 
         if not all_metadatas:
             return {"status": "error", "message": "Target not detected anywhere."}
 
-        # ── Distance + file-existence guard ───────────────────────────────────
+        # 3. Filter candidates by distance and verify files exist on disk
         valid_frames = [
             {
                 "source_id":  m["source_id"],
@@ -404,16 +346,13 @@ class OfflineVideoPipeline:
         ]
 
         if not valid_frames:
-            # Distance filter might be too tight — log what we actually got
-            print(f"[TRACING] All {len(all_metadatas)} candidates filtered out. "
-                  f"Min distance seen: {min(all_distances):.4f}")
+            print(f"🕵️‍♂️ [Timeline] Candidates rejected. Minimum distance seen: {min(all_distances):.4f}")
             return {
                 "status":  "error",
-                "message": "No confident/existing target locks. "
-                           "Try a more specific query or re-upload the footage.",
+                "message": "No confident target locks. Try a more specific query.",
             }
 
-        # ── Deduplicate by frame_path (same frame can appear in multiple searches) ──
+        # Deduplicate matching frames by path
         seen: set[str] = set()
         deduped: list[dict] = []
         for f in valid_frames:
@@ -422,10 +361,10 @@ class OfflineVideoPipeline:
                 deduped.append(f)
         valid_frames = deduped
 
-        # Sort chronologically
+        # Sort matches chronologically
         valid_frames.sort(key=lambda x: x["timestamp"])
 
-        # ── Compress into timeline blocks (same camera, gap ≤ 60 s) ──────────
+        # 4. Group matches into timeline blocks (if same camera and frame gap ≤ 60 seconds)
         timeline: list[dict] = []
         current_block: dict | None = None
 
@@ -456,8 +395,7 @@ class OfflineVideoPipeline:
         if current_block:
             timeline.append(current_block)
 
-        print(f"[TRACING] Timeline built: {len(timeline)} node(s) across "
-              f"{len({b['source_id'] for b in timeline})} camera(s)")
+        print(f"🕵️‍♂️ [Timeline] Constructed {len(timeline)} timeline nodes across {len({b['source_id'] for b in timeline})} camera(s).")
 
         if skip_vlm:
             return {
@@ -466,14 +404,12 @@ class OfflineVideoPipeline:
                 "timeline_nodes": timeline,
             }
 
-        # ── VLM synthesis ─────────────────────────────────────────────────────
+        # 5. Synthesize a chronological report using Gemini VLM
         vlm_content = [
-            "You are a master Surveillance Intelligence Agent specializing in "
-            "cross-camera lineage tracking.",
+            "You are a master Surveillance Intelligence Agent specializing in cross-camera lineage tracking.",
             f"User request: '{text_query}'.",
-            "Analyze every frame deeply. Synthesize a professional incident timeline "
-            "detailing where the target went, what they were doing, and their visible "
-            "behavior across zones. Act like a lead detective.",
+            "Analyze every frame deeply. Synthesize a professional incident timeline detailing where the target went, "
+            "what they were doing, and their visible behavior across zones. Act like a lead detective.",
         ]
         for idx, block in enumerate(timeline):
             vlm_content.append(
@@ -481,45 +417,38 @@ class OfflineVideoPipeline:
                 f"Time window: {block['start_time']:.1f}s – {block['end_time']:.1f}s"
             )
             vlm_content.append(
-                self._resize_for_vlm(Image.open(block["best_frame"]))
+                self.vlm.resize_for_vlm(Image.open(block["best_frame"]))
             )
         vlm_content.append(
-            "Synthesize a strict, professional incident timeline detailing "
-            "where the target went and what they were doing across these zones."
+            "Synthesize a strict, professional incident timeline detailing where the target went and what they were doing across these zones."
         )
 
         return {
             "status":          "success",
             "target":          text_query,
-            "incident_report": self._vlm_query(text_query, vlm_content),
+            "incident_report": self.vlm.query(text_query, vlm_content),
             "timeline_nodes":  timeline,
         }
 
-
-    # ──────────────────────────────────────────────────────────────────────────
-    # Reverse image search — hardware-accelerated with multimodal fusion
-    # ──────────────────────────────────────────────────────────────────────────
 
     def find_suspect_by_image(self, suspect_image_path: str,
                               top_k: int = 5,
                               min_timestamp: float | None = None,
                               text_query: str | None = None) -> dict:
         """
-        Multi-modal reverse image search.
-        Signature matches teammate's API contract (text_query param for context fusion).
-
-        Pipeline:
-          1. cv2.imread → BGR tensor on device   (IO + device preprocessing)
-          2. CLIP image encode                   (device)
-          3. Optional text encode                (device)
-          4. _fuse_modalities                    (weighted mean on device, re-normalise)
-          5. ChromaDB query                      (cached cosine search)
-          6. VLM verification with resized imgs  (IO — cached)
+        Performs reverse visual search matching a suspect mugshot against surveillance video collections.
+        
+        Workflow:
+          1. Loads visual image.
+          2. Preprocesses and encodes mugshot to visual embedding via `Embedder`.
+          3. Optionally encodes text query to textual embedding.
+          4. Fuses visual and text embeddings via vector arithmetic mean to construct the search query.
+          5. Queries database collections using `VectorDBManager`.
+          6. Submits matches to the Gemini model via `VLMManager` for facial recognition verification.
         """
-        print(f"\n[REVERSE IMAGE SEARCH] Visual query: '{suspect_image_path}' "
-              f"+ context: '{text_query}'")
+        print(f"\n🔍 [Visual Search] Mugshot: '{suspect_image_path}' + Context: '{text_query or 'None'}'")
 
-        # ── IO: load suspect image ───────────────────────────────────────────
+        # 1. Load the suspect reference mugshot image
         bgr_frame = cv2.imread(suspect_image_path)
         if bgr_frame is None:
             return {
@@ -527,30 +456,27 @@ class OfflineVideoPipeline:
                 "message": f"Could not read suspect image: '{suspect_image_path}'"
             }
 
-        # ── Device: image preprocessing + encoding ────────────────────────────
-        hw_tensor   = self._convert_cv2_to_hardware_tensor(bgr_frame)   # device
-        img_vec     = self._encode_image_tensor(hw_tensor)               # device [D]
+        # 2. Extract visual features using CLIP on the active hardware device
+        hw_tensor = self.embedder.convert_frame_to_tensor(bgr_frame)
+        img_vec   = self.embedder.encode_image_tensor(hw_tensor)
 
-        # ── Device: optional text encode ───────────────────────────────────────
-        text_vec = self._encode_text(text_query) if text_query else None  # device [D]
+        # 3. Extract text features if textual context is provided
+        text_vec = self.embedder.encode_text(text_query) if text_query else None
 
-        # ── Device: multimodal fusion ────────────────────────────────────
-        # Equal weight (0.5/0.5) matches teammate's arithmetic mean fusion.
-        query_vec = _fuse_modalities(img_vec, text_vec, image_weight=0.5)
+        # 4. Fuse visual and text vectors into a single unified search vector
+        query_vec = fuse_modalities(img_vec, text_vec, image_weight=0.5)
 
-        # ── Search ────────────────────────────────────────────────────────────
+        # 5. Query active database collections
         where_filter = {"timestamp": {"$gte": min_timestamp}} if min_timestamp else None
-
-        # Try both collections — suspect could be in live OR uploaded footage
         results = None
-        for cname in [self.COLLECTION_UPLOADED, self.COLLECTION_LIVE,
-                      self.default_collection_name]:
-            col = self._get_collection(cname)
-            r   = col.query(
-                query_embeddings=[query_vec.cpu().tolist()],
-                n_results=top_k,
-                where=where_filter,
-                include=["metadatas", "distances"]
+
+        # Iterate over collections to find the suspect in either live streams or uploaded vaults
+        for cname in [self.COLLECTION_UPLOADED, self.COLLECTION_LIVE, self.default_collection_name]:
+            r = self.db.query(
+                collection_name=cname,
+                query_embedding=query_vec.cpu().tolist(),
+                top_k=top_k,
+                where_filter=where_filter
             )
             if r['ids'] and r['ids'][0]:
                 results = r
@@ -562,7 +488,7 @@ class OfflineVideoPipeline:
         metadatas = results['metadatas'][0]
         distances = results.get('distances', [[0.0] * len(metadatas)])[0]
 
-        # ── File-existence guard ──────────────────────────────────────────────
+        # 6. Verify that matched frame images exist on disk
         valid_frames = [
             {
                 "source_id":  m["source_id"],
@@ -575,31 +501,31 @@ class OfflineVideoPipeline:
         ]
 
         if not valid_frames:
-            return {"status": "error",
-                    "message": "No valid frames on disk for this suspect photo."}
+            return {"status": "error", "message": "No valid matching frames on disk."}
 
-        # ── VLM verification (IO-bound — cached + resized) ────────────────────
-        # PIL only for VLM — Gemini API requires PIL images
+        # 7. Use Gemini VLM for final facial recognition comparison
         suspect_pil = Image.open(suspect_image_path).convert("RGB")
-
         vlm_content = [
             "You are a strict security facial recognition and object-matching AI Agent.",
             f"User Context: {text_query if text_query else 'General identification only.'}",
             "Compare the suspect reference image to the CCTV frames.",
             "State MATCH CONFIRMED or NO MATCH followed by a professional 2-line summary.",
-            self._resize_for_vlm(suspect_pil),
+            self.vlm.resize_for_vlm(suspect_pil),
             "DATABASE VISUAL RETURNS:"
         ]
+        # Include top 3 visual search frame returns
         for m in valid_frames[:3]:
-            vlm_content.append(self._resize_for_vlm(Image.open(m['frame_path'])))
+            vlm_content.append(self.vlm.resize_for_vlm(Image.open(m['frame_path'])))
 
         cache_key = f"{suspect_image_path}_{text_query or ''}"
         timestamps = [f["timestamp"] for f in valid_frames]
 
+        response_text = self.vlm.query(cache_key, vlm_content)
+
         return {
             "status":          "success",
             "query":           f"Mugshot + {text_query or 'Visual Only'}",
-            "response":        self._vlm_query(cache_key, vlm_content),
+            "response":        response_text,
             "source_id":       valid_frames[0]['source_id'],
             "clip_start":      max(0, min(timestamps) - 2.0),
             "clip_end":        max(timestamps) + 2.0,
