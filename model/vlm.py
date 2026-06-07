@@ -73,3 +73,58 @@ class VLMManager:
         except Exception as e:
             print(f"🛑 [VLM API] Error calling Gemini: {e}")
             return f"Error executing VLM verification: {e}"
+
+    def verify_frames(self, text_query: str, frames: list[dict]) -> str:
+        """
+        Loads match frames, resizes them, constructs VLM instructions, and queries Gemini.
+        """
+        vlm_content = [
+            f"Query: '{text_query}'. Analyze these CCTV frames and confirm if the target is present. "
+            "Provide a professional 2-line summary. Mention the primary frame of detection clearly."
+        ]
+        for m in frames:
+            vlm_content.append(self.resize_for_vlm(Image.open(m['frame_path'])))
+        return self.query(text_query, vlm_content)
+
+    def verify_timeline(self, text_query: str, timeline: list[dict]) -> str:
+        """
+        Creates a prompt for generating a synthesized chronological movement report from timeline blocks.
+        """
+        vlm_content = [
+            "You are a master Surveillance Intelligence Agent specializing in cross-camera lineage tracking.",
+            f"User request: '{text_query}'.",
+            "Analyze every frame deeply. Synthesize a professional incident timeline detailing where the target went, "
+            "what they were doing, and their visible behavior across zones. Act like a lead detective.",
+        ]
+        for idx, block in enumerate(timeline):
+            vlm_content.append(
+                f"Event {idx + 1} — Camera: {block['source_id']} | "
+                f"Time window: {block['start_time']:.1f}s – {block['end_time']:.1f}s"
+            )
+            vlm_content.append(
+                self.resize_for_vlm(Image.open(block["best_frame"]))
+            )
+        vlm_content.append(
+            "Synthesize a strict, professional incident timeline detailing where the target went and what they were doing across these zones."
+        )
+        return self.query(text_query, vlm_content)
+
+    def verify_suspect(self, suspect_image_path: str, text_query: str | None, frames: list[dict]) -> str:
+        """
+        Compares a suspect mugshot to matched frames for facial verification/matching.
+        """
+        suspect_pil = Image.open(suspect_image_path).convert("RGB")
+        vlm_content = [
+            "You are a strict security facial recognition and object-matching AI Agent.",
+            f"User Context: {text_query if text_query else 'General identification only.'}",
+            "Compare the suspect reference image to the CCTV frames.",
+            "State MATCH CONFIRMED or NO MATCH followed by a professional 2-line summary.",
+            self.resize_for_vlm(suspect_pil),
+            "DATABASE VISUAL RETURNS:"
+        ]
+        for m in frames[:3]:
+            vlm_content.append(self.resize_for_vlm(Image.open(m['frame_path'])))
+            
+        cache_key = f"{suspect_image_path}_{text_query or ''}"
+        return self.query(cache_key, vlm_content)
+

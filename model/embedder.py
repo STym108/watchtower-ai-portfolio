@@ -142,3 +142,16 @@ class Embedder:
             feat = self.model.encode_text(tokens)
             feat /= feat.norm(dim=-1, keepdim=True)
         return feat.squeeze(0)
+
+    def encode_image_path(self, path: str) -> torch.Tensor | None:
+        """
+        Loads an image file from disk, preprocesses it, and generates its normalized CLIP embedding.
+        Returns None if the file cannot be read.
+        """
+        import cv2
+        img = cv2.imread(path)
+        if img is None:
+            return None
+        tensor = self.convert_frame_to_tensor(img)
+        return self.encode_image_tensor(tensor)
+
